@@ -1,14 +1,12 @@
 # 公文格式化工具 (Gongwen Document Formatter)
 
-专业的 Word 文档自动化排版工具，符合 **GB/T 9704 党政机关公文格式规范** 和 **政府交付版格式标准**。
+专业的 Word 文档自动化排版工具（VBA宏版本），符合 **GB/T 9704 党政机关公文格式规范** 和 **政府交付版格式标准**。
 
 ## ✨ 功能特点
 
 - ✅ **双模式支持**：GB/T 9704标准模式 + 政府交付版模式
 - ✅ **完全符合规范**：严格遵循标准的 7 项格式要求
-- 🎨 **现代化界面**：精美的 Web 界面，支持拖拽上传
 - 🚀 **一键格式化**：自动识别标题级别，智能应用格式
-- 📝 **多种使用方式**：Web 界面、Python API、VBA 宏
 - 🔧 **字体兼容**：自动检测并退化到可用字体
 - 💼 **WPS兼容**：完美支持 WPS Office 和 Microsoft Word
 
@@ -33,9 +31,9 @@
 
 ### 2. 标题格式
 - **一级标题**：方正小标宋简体二号，30磅行距，居中
-- **二级标题**：黑体三号，30磅行距，左缩进2字符
-- **三级标题**：楷体_GB2312三号，30磅行距，左缩进2字符
-- **四级及以下**：仿宋_GB2312三号，28磅行距，左缩进2字符
+- **二级标题**：黑体三号，30磅行距，左缩进/首行缩进2字符
+- **三级标题**：楷体_GB2312三号，30磅行距，左缩进/首行缩进2字符
+- **四级及以下**：仿宋_GB2312三号，28磅行距，左缩进/首行缩进2字符
 
 ### 3. 标题序号
 依次使用：`一、` → `（一）` → `1．` → `（1）` → `①`
@@ -63,54 +61,7 @@
 
 ## 🚀 快速开始
 
-### 方法一：Web 界面（推荐）
-
-1. **安装依赖**
-```bash
-pip install flask flask-cors python-docx
-```
-
-2. **启动服务器**
-```bash
-python web_server.py
-```
-
-3. **打开浏览器**
-访问 `http://localhost:5000`
-
-4. **使用界面**
-- 拖拽或点击上传 `.docx` 文件
-- 点击"格式化文档"按钮
-- 自动下载格式化后的文档
-
-### 方法二：Python 命令行
-
-1. **安装依赖**
-```bash
-pip install python-docx
-```
-
-2. **格式化已有文档**
-```bash
-# 使用GB/T 9704标准模式（默认）
-python gongwen_formatter.py input.docx output.docx
-
-# 使用政府交付版模式
-python gongwen_formatter.py input.docx output.docx --government
-# 或使用简写
-python gongwen_formatter.py input.docx output.docx -g
-```
-
-3. **创建示例文档**
-```bash
-# 标准模式
-python gongwen_formatter.py
-
-# 政府交付版模式
-python gongwen_formatter.py --government
-```
-
-### 方法三：VBA 宏（Word/WPS 内使用）
+### VBA 宏（Word/WPS 内使用）
 
 #### 支持的软件
 - ✅ Microsoft Word 2010 或更高版本
@@ -153,7 +104,17 @@ python gongwen_formatter.py --government
 4. 点击打开
 ```
 
-**第三步：运行宏命令**
+**第四步：运行宏命令**
+
+1. 按 `Alt + F8` 打开宏对话框
+2. 选择 `FormatGongwen` 或 `格式化公文`
+3. 点击"运行"
+4. 在弹出的对话框中选择格式模式：
+   - 点击【是】→ GB/T 9704标准模式
+   - 点击【否】→ 政府交付版模式
+   - 点击【取消】→ 取消操作
+
+#### 可用的宏命令
 
 | 宏名称 | 功能说明 | 使用场景 |
 |--------|----------|----------|
@@ -168,11 +129,7 @@ python gongwen_formatter.py --government
 | `ApplyBodyToSelection` | 应用正文样式 | 正文格式化 |
 | `AddHeader("文字")` | 添加页眉 | 设置页眉内容 |
 | `AddPageNumber` | 添加页码 | 设置页码格式 |
-
-**第四步：快捷操作**
-- 按 `Alt + F8` 打开宏对话框
-- 选择对应宏名称
-- 点击运行按钮
+| `ReplaceSymbols` | 符号替换 | 中英文标点转换 |
 
 #### 标题识别规则
 
@@ -220,53 +177,26 @@ A: 检查原文档标题格式是否符合识别规则
 Q: 字体显示异常
 A: 系统缺少对应字体，程序已自动退化处理
 
+Q: 对话框显示乱码
+A: 使用最新版本的 .bas 文件（已修复编码问题）
+
 ## 📁 文件说明
 
 ```
 wordhong/
-├── index.html              # Web 界面主页
-├── styles.css              # 界面样式（现代化设计）
-├── script.js               # 前端交互逻辑
-├── web_server.py           # Flask 后端服务器
-├── gongwen_formatter.py    # Python 格式化引擎
-├── GongwenFormatter.bas    # VBA 宏（已修复语法）
-├── demo_gongwen.docx       # 示例文档
-└── README.md               # 本文件
-```
-
-## 🔧 Python API 使用
-
-```python
-from gongwen_formatter import GongwenFormatter, FORMAT_MODE_STANDARD, FORMAT_MODE_GOVERNMENT
-
-# 创建格式化器（默认为标准模式）
-formatter = GongwenFormatter()
-
-# 或指定政府交付版模式
-formatter = GongwenFormatter(format_mode=FORMAT_MODE_GOVERNMENT)
-
-# 添加页码和页眉
-formatter.add_page_number()
-formatter.add_header('文档标题')
-
-# 添加各级标题
-formatter.add_heading('一级标题', 1)
-formatter.add_heading('一、二级标题', 2)
-formatter.add_heading('（一）三级标题', 3)
-formatter.add_heading('1．四级标题', 4)
-
-# 添加正文
-formatter.add_body_paragraph('这是正文内容...')
-
-# 添加表格
-table_data = [
-    ['序号', '项目', '数值'],
-    ['1', '测试', '100']
-]
-formatter.add_table('表1 示例表格', 2, 3, table_data)
-
-# 保存文档
-formatter.save('output.docx')
+├── GongwenFormatter.bas          # Word VBA宏（推荐）
+├── GongwenFormatter_WPS.bas      # WPS VBA宏（WPS推荐）
+├── ResearchProjectFormatter.bas  # 课题研究格式化工具
+├── demo_gongwen.docx             # 示例文档
+├── README.md                     # 本文件
+├── CHANGELOG.md                  # 版本更新日志
+├── 政府部门格式标准.txt          # 政府交付版标准
+├── 格式模式说明.md               # 详细模式对比
+├── WPS兼容性说明.md              # WPS使用说明
+├── 使用指南.md                   # 快速使用指南
+├── VBA宏版本更新说明.md          # VBA更新说明
+├── VBA宏更新指南.md              # 更新步骤
+└── VBA编码问题修复.md            # 问题修复说明
 ```
 
 ## 📊 格式模式对比
@@ -279,25 +209,6 @@ formatter.save('output.docx')
 | 四级标题 | 左对齐，**左缩进2字符** | 左对齐，**首行缩进2字符** |
 | 正文 | 首行缩进2字符 | 首行缩进2字符 |
 | 文档网格 | 不要求 | 对齐到网格 |
-
-## 🐛 BAS 语法修复说明
-
-已修复 `GongwenFormatter.bas` 中的语法错误：
-- **第 525 行**：`Dim cell As cell` → `Dim Cell As Cell`
-- **第 531-543 行**：所有 `cell` 变量引用已更正为 `Cell`
-
-VBA 对类型名称大小写敏感，`Cell` 是正确的类型名称。
-
-## 🎨 Web 界面特色
-
-- 🌙 **深色主题**：现代化渐变配色
-- ✨ **流畅动画**：微交互提升体验
-- 📱 **响应式设计**：支持各种屏幕尺寸
-- 🎯 **拖拽上传**：直观的文件上传方式
-- 📊 **实时进度**：格式化进度可视化
-- ⌨️ **快捷键支持**：
-  - `Ctrl/Cmd + O`：打开文件
-  - `Ctrl/Cmd + Enter`：格式化文档
 
 ## 📝 注意事项
 
@@ -320,10 +231,7 @@ VBA 对类型名称大小写敏感，`Cell` 是正确的类型名称。
 
 ## 🔍 技术栈
 
-- **前端**：HTML5 + CSS3 + Vanilla JavaScript
-- **后端**：Python 3.7+ + Flask
-- **文档处理**：python-docx
-- **VBA**：Microsoft Word VBA
+- **VBA**：Microsoft Word VBA / WPS VBA
 
 ## 📄 许可证
 
@@ -338,4 +246,3 @@ VBA 对类型名称大小写敏感，`Cell` 是正确的类型名称。
 **开发者**: Antigravity AI
 **版本**: v1.1
 **最后更新**: 2026-02-08
-**新增功能**: 政府交付版格式模式支持
