@@ -135,7 +135,11 @@ class GongwenFormatterUI {
             return;
         }
 
-        this.showStatus('processing', '正在处理...', '正在格式化您的文档，请稍候');
+        // 获取选中的格式模式
+        const formatMode = document.querySelector('input[name="formatMode"]:checked').value;
+        const modeName = formatMode === 'government' ? '政府交付版' : 'GB/T 9704标准';
+
+        this.showStatus('processing', '正在处理...', `正在使用${modeName}格式化您的文档，请稍候`);
         this.showProgress(0);
 
         try {
@@ -145,6 +149,7 @@ class GongwenFormatterUI {
             // Call Python backend
             const formData = new FormData();
             formData.append('file', this.selectedFile);
+            formData.append('format_mode', formatMode);
 
             const response = await fetch('/api/format', {
                 method: 'POST',
@@ -167,7 +172,7 @@ class GongwenFormatterUI {
             document.body.removeChild(a);
 
             this.showProgress(100);
-            this.showStatus('success', '格式化完成！', '文档已按照 GB/T 9704 标准格式化并下载');
+            this.showStatus('success', '格式化完成！', `文档已按照${modeName}格式化并下载`);
 
         } catch (error) {
             console.error('Error:', error);
@@ -176,7 +181,11 @@ class GongwenFormatterUI {
     }
 
     async createDemo() {
-        this.showStatus('processing', '正在创建示例文档...', '正在生成符合规范的示例文档');
+        // 获取选中的格式模式
+        const formatMode = document.querySelector('input[name="formatMode"]:checked').value;
+        const modeName = formatMode === 'government' ? '政府交付版' : 'GB/T 9704标准';
+
+        this.showStatus('processing', '正在创建示例文档...', `正在生成符合${modeName}的示例文档`);
         this.showProgress(0);
 
         try {
@@ -184,7 +193,11 @@ class GongwenFormatterUI {
             await this.simulateProgress();
 
             const response = await fetch('/api/create-demo', {
-                method: 'POST'
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ format_mode: formatMode })
             });
 
             if (!response.ok) {
@@ -203,7 +216,7 @@ class GongwenFormatterUI {
             document.body.removeChild(a);
 
             this.showProgress(100);
-            this.showStatus('success', '示例文档已创建！', '示例文档已生成并下载，包含所有格式规范演示');
+            this.showStatus('success', '示例文档已创建！', `示例文档已按${modeName}生成并下载`);
 
         } catch (error) {
             console.error('Error:', error);

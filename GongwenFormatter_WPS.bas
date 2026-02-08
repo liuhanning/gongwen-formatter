@@ -1,7 +1,8 @@
 Attribute VB_Name = "GongwenFormatter"
 '==============================================================================
-' 公文格式化工具 (Microsoft Word 版本) v1.1
+' 公文格式化工具 (WPS 兼容版本) v1.1
 ' 符合 GB/T 9704 标准 + 政府交付版格式标准
+' 兼容 WPS Office 和 Microsoft Word
 '==============================================================================
 
 Option Explicit
@@ -26,6 +27,12 @@ Private Const FONT_SIZE_SI As Single = 14             ' 四号
 ' 行距 (单位：磅)
 Private Const LINE_SPACING_30 As Single = 30
 Private Const LINE_SPACING_28 As Single = 28
+
+Private Function IsWPS() As Boolean
+    On Error Resume Next
+    IsWPS = (InStr(1, Application.Name, "WPS", vbTextCompare) > 0)
+    On Error GoTo 0
+End Function
 
 '==============================================================================
 ' 格式模式选择对话框
@@ -56,14 +63,18 @@ End Function
 '==============================================================================
 
 Public Sub ReplaceSymbols()
-    Dim undoRec As UndoRecord
+    Dim undoRec As Object
     
     Application.ScreenUpdating = False
     
-    On Error GoTo ErrorHandler
-    
+    On Error Resume Next
     Set undoRec = Application.UndoRecord
-    undoRec.StartCustomRecord "符号替换"
+    If Not undoRec Is Nothing Then
+        undoRec.StartCustomRecord "符号替换"
+    End If
+    On Error GoTo 0
+    
+    On Error GoTo ErrorHandler
     
     ' 1. 替换英文逗号为中文逗号
     Call DoReplace(",", ChrW(&HFF0C))
@@ -80,7 +91,9 @@ Public Sub ReplaceSymbols()
     ' 5. 智能替换引号（交替左右引号）
     Call ReplaceQuotesInternal
     
-    undoRec.EndCustomRecord
+    On Error Resume Next
+    If Not undoRec Is Nothing Then undoRec.EndCustomRecord
+    On Error GoTo 0
     
     Application.ScreenUpdating = True
     
@@ -102,14 +115,14 @@ End Sub
 
 ' 替换函数 (跳过表格)
 Private Sub DoReplace(findWhat As String, replaceWith As String)
-    Dim rng As Range
+    Dim rng As Object
     Set rng = ActiveDocument.Range
     With rng.Find
         .ClearFormatting
         .Replacement.ClearFormatting
         .Text = findWhat
         .Forward = True
-        .Wrap = wdFindStop
+        .Wrap = 0 ' wdFindStop = 0
         .Format = False
         .MatchCase = False
         .MatchWholeWord = False
@@ -117,12 +130,12 @@ Private Sub DoReplace(findWhat As String, replaceWith As String)
         .MatchSoundsLike = False
         .MatchAllWordForms = False
         
-        Do While .Execute(Replace:=wdReplaceNone)
-            ' 检查是否在表格中，如果不在则替换
-            If Not rng.Information(wdWithInTable) Then
+        Do While .Execute(Replace:=0) ' wdReplaceNone = 0
+            ' 检查是否在表格中，如果不在则替换 (12 是 wdWithInTable)
+            If Not rng.Information(12) Then
                 rng.Text = replaceWith
             End If
-            rng.Collapse wdCollapseEnd
+            rng.Collapse 0 ' wdCollapseEnd = 0
         Loop
     End With
 End Sub
@@ -137,22 +150,26 @@ Public Sub ReplaceQuotesSmart()
     Dim txt As String
     Dim i As Long
     Dim isLeft As Boolean
-    Dim undoRec As UndoRecord
+    Dim undoRec As Object
     Dim quoteChar As String
     
     Application.ScreenUpdating = False
     
-    On Error GoTo ErrorHandler
-    
+    On Error Resume Next
     Set undoRec = Application.UndoRecord
-    undoRec.StartCustomRecord "智能引号替换"
+    If Not undoRec Is Nothing Then
+        undoRec.StartCustomRecord "智能引号替换"
+    End If
+    On Error GoTo 0
+    
+    On Error GoTo ErrorHandler
     
     quoteChar = Chr(34)
     isLeft = True
     
     For Each para In ActiveDocument.Paragraphs
-        ' 跳过表格中的段落
-        If Not para.Range.Information(wdWithInTable) Then
+        ' 跳过表格中的段落 (12 是 wdWithInTable)
+        If Not para.Range.Information(12) Then
             Set rng = para.Range
             txt = rng.Text
             
@@ -172,7 +189,9 @@ Public Sub ReplaceQuotesSmart()
         End If
     Next para
     
-    undoRec.EndCustomRecord
+    On Error Resume Next
+    If Not undoRec Is Nothing Then undoRec.EndCustomRecord
+    On Error GoTo 0
     
     Application.ScreenUpdating = True
     MsgBox "智能引号替换完成！" & vbCrLf & vbCrLf & _
@@ -192,14 +211,18 @@ End Sub
 '==============================================================================
 
 Public Sub ReplaceAllSymbols()
-    Dim undoRec As UndoRecord
+    Dim undoRec As Object
     
     Application.ScreenUpdating = False
     
-    On Error GoTo ErrorHandler
-    
+    On Error Resume Next
     Set undoRec = Application.UndoRecord
-    undoRec.StartCustomRecord "全部符号替换"
+    If Not undoRec Is Nothing Then
+        undoRec.StartCustomRecord "全部符号替换"
+    End If
+    On Error GoTo 0
+    
+    On Error GoTo ErrorHandler
     
     ' 替换逗号
     Call DoReplace(",", ChrW(&HFF0C))
@@ -214,7 +237,9 @@ Public Sub ReplaceAllSymbols()
     ' 智能替换引号
     Call ReplaceQuotesInternal
     
-    undoRec.EndCustomRecord
+    On Error Resume Next
+    If Not undoRec Is Nothing Then undoRec.EndCustomRecord
+    On Error GoTo 0
     
     Application.ScreenUpdating = True
     
@@ -247,8 +272,8 @@ Private Sub ReplaceQuotesInternal()
     isLeft = True
     
     For Each para In ActiveDocument.Paragraphs
-        ' 跳过表格中的段落
-        If Not para.Range.Information(wdWithInTable) Then
+        ' 跳过表格中的段落 (12 是 wdWithInTable)
+        If Not para.Range.Information(12) Then
             Set rng = para.Range
             txt = rng.Text
             
@@ -274,7 +299,7 @@ End Sub
 '==============================================================================
 
 Public Sub FormatGongwen()
-    Dim undoRec As UndoRecord
+    Dim undoRec As Object
     Dim modeName As String
 
     ' 选择格式模式
@@ -293,10 +318,14 @@ Public Sub FormatGongwen()
 
     Application.ScreenUpdating = False
 
-    On Error GoTo ErrorHandler
-
+    On Error Resume Next
     Set undoRec = Application.UndoRecord
-    undoRec.StartCustomRecord "格式化公文"
+    If Not undoRec Is Nothing Then
+        undoRec.StartCustomRecord "格式化公文"
+    End If
+    On Error GoTo 0
+
+    On Error GoTo ErrorHandler
 
     ' 1. 页面设置
     Call SetupPage
@@ -316,7 +345,9 @@ Public Sub FormatGongwen()
     ' 5. 智能引号替换
     Call ReplaceQuotesInternal
 
-    undoRec.EndCustomRecord
+    On Error Resume Next
+    If Not undoRec Is Nothing Then undoRec.EndCustomRecord
+    On Error GoTo 0
 
     Application.ScreenUpdating = True
     MsgBox "公文格式化完成！" & vbCrLf & vbCrLf & _
@@ -326,7 +357,7 @@ Public Sub FormatGongwen()
            "√ 段落格式化（字体、行距、缩进）" & vbCrLf & _
            "√ 添加页码（页脚居中）" & vbCrLf & _
            "√ 符号替换（逗号、括号、冒号、引号）" & vbCrLf & vbCrLf & _
-           "提示：按 Ctrl+Z 可撤销所有更改", vbInformation, "公文格式化工具 v1.1"
+           "提示：按 Ctrl+Z 可撤销所有更改", vbInformation, "公文格式化工具 v1.1 (WPS兼容版)"
     Exit Sub
 
 ErrorHandler:
@@ -338,20 +369,26 @@ End Sub
 
 Public Sub FormatSelectedParagraphs()
     Dim para As Paragraph
-    Dim undoRec As UndoRecord
+    Dim undoRec As Object
     
     Application.ScreenUpdating = False
     
-    On Error GoTo ErrorHandler
-    
+    On Error Resume Next
     Set undoRec = Application.UndoRecord
-    undoRec.StartCustomRecord "格式化选中段落"
+    If Not undoRec Is Nothing Then
+        undoRec.StartCustomRecord "格式化选中段落"
+    End If
+    On Error GoTo 0
+    
+    On Error GoTo ErrorHandler
     
     For Each para In Selection.Paragraphs
         Call FormatSingleParagraph(para)
     Next para
     
-    undoRec.EndCustomRecord
+    On Error Resume Next
+    If Not undoRec Is Nothing Then undoRec.EndCustomRecord
+    On Error GoTo 0
     
     Application.ScreenUpdating = True
     MsgBox "选中段落格式化完成！" & vbCrLf & vbCrLf & _
@@ -370,6 +407,7 @@ End Sub
 '==============================================================================
 
 Private Sub SetupPage()
+    On Error Resume Next
     With ActiveDocument.PageSetup
         .PageWidth = CentimetersToPoints(21)
         .PageHeight = CentimetersToPoints(29.7)
@@ -380,7 +418,7 @@ Private Sub SetupPage()
         .HeaderDistance = HEADER_DISTANCE
         .FooterDistance = FOOTER_DISTANCE
         .Gutter = 0
-        .GutterPos = wdGutterPosLeft
+        .GutterPos = 0
     End With
 End Sub
 
@@ -396,8 +434,8 @@ Private Sub FormatAllParagraphs()
     
     For i = 1 To total
         Set para = ActiveDocument.Paragraphs(i)
-        ' 跳过表格中的段落
-        If Not para.Range.Information(wdWithInTable) Then
+        ' 跳过表格中的段落 (12 是 wdWithInTable)
+        If Not para.Range.Information(12) Then
             Call FormatSingleParagraph(para)
         End If
         If i Mod 100 = 0 Then Application.StatusBar = "正在格式化... " & i & "/" & total
@@ -409,6 +447,7 @@ End Sub
 Private Sub FormatSingleParagraph(para As Paragraph)
     Dim txt As String, level As String
     
+    On Error Resume Next
     txt = Trim(para.Range.Text)
     If Len(txt) <= 1 Then Exit Sub
     
@@ -425,8 +464,6 @@ Private Sub FormatSingleParagraph(para As Paragraph)
         Case "figure_title": Call ApplyFigureTitleStyle(para)
         Case Else: Call ApplyBodyStyle(para)
     End Select
-    
-    Call FormatMixedText(para)
 End Sub
 
 Private Function DetectLevel(txt As String) As String
@@ -490,237 +527,167 @@ End Function
 '==============================================================================
 
 Private Sub ApplyLevel1Style(para As Paragraph)
+    On Error Resume Next
     With para.Range.Font
         .NameFarEast = GetFont("方正小标宋简体", "华文中宋", "宋体")
         .NameAscii = "Times New Roman"
-        .NameOther = "Times New Roman"
         .Size = FONT_SIZE_ER
         .Bold = False
     End With
     With para.Format
-        .Alignment = wdAlignParagraphCenter
-        .LineSpacingRule = wdLineSpaceExactly
-        .LineSpacing = LINE_SPACING_30
-        .SpaceBefore = 8
-        .SpaceAfter = 8
-        .FirstLineIndent = 0
-        .LeftIndent = 0
+        .Alignment = 1: .LineSpacingRule = 4: .LineSpacing = LINE_SPACING_30
+        .SpaceBefore = 8: .SpaceAfter = 8: .FirstLineIndent = 0: .LeftIndent = 0
     End With
 End Sub
 
 Private Sub ApplyLevel2Style(para As Paragraph)
     Dim indentValue As Single
+    On Error Resume Next
     indentValue = CentimetersToPoints(0.85) * 2  ' 2字符
 
     With para.Range.Font
         .NameFarEast = GetFont("黑体", "微软雅黑", "宋体")
         .NameAscii = "Times New Roman"
-        .NameOther = "Times New Roman"
         .Size = FONT_SIZE_SAN
         .Bold = False
     End With
     With para.Format
-        .Alignment = wdAlignParagraphLeft
-        .LineSpacingRule = wdLineSpaceExactly
-        .LineSpacing = LINE_SPACING_30
-        .SpaceBefore = 8
-        .SpaceAfter = 8
+        .Alignment = 0: .LineSpacingRule = 4: .LineSpacing = LINE_SPACING_30
+        .SpaceBefore = 8: .SpaceAfter = 8
         ' 根据格式模式设置缩进
         If g_FormatMode = "government" Then
-            ' 政府交付版：首行缩进
-            .FirstLineIndent = indentValue
-            .LeftIndent = 0
+            .FirstLineIndent = indentValue: .LeftIndent = 0
         Else
-            ' GB/T 9704标准：左缩进
-            .FirstLineIndent = 0
-            .LeftIndent = indentValue
+            .FirstLineIndent = 0: .LeftIndent = indentValue
         End If
     End With
 End Sub
 
 Private Sub ApplyLevel3Style(para As Paragraph)
     Dim indentValue As Single
+    On Error Resume Next
     indentValue = CentimetersToPoints(0.85) * 2  ' 2字符
 
     With para.Range.Font
         .NameFarEast = GetFont("楷体_GB2312", "楷体", "华文楷体")
         .NameAscii = "Times New Roman"
-        .NameOther = "Times New Roman"
         .Size = FONT_SIZE_SAN
         .Bold = False
     End With
     With para.Format
-        .Alignment = wdAlignParagraphLeft
-        .LineSpacingRule = wdLineSpaceExactly
-        .LineSpacing = LINE_SPACING_30
-        .SpaceBefore = 8
-        .SpaceAfter = 8
+        .Alignment = 0: .LineSpacingRule = 4: .LineSpacing = LINE_SPACING_30
+        .SpaceBefore = 8: .SpaceAfter = 8
         ' 根据格式模式设置缩进
         If g_FormatMode = "government" Then
-            ' 政府交付版：首行缩进
-            .FirstLineIndent = indentValue
-            .LeftIndent = 0
+            .FirstLineIndent = indentValue: .LeftIndent = 0
         Else
-            ' GB/T 9704标准：左缩进
-            .FirstLineIndent = 0
-            .LeftIndent = indentValue
+            .FirstLineIndent = 0: .LeftIndent = indentValue
         End If
     End With
 End Sub
 
 Private Sub ApplyLevel4Style(para As Paragraph)
     Dim indentValue As Single
+    On Error Resume Next
     indentValue = CentimetersToPoints(0.85) * 2  ' 2字符
 
     With para.Range.Font
         .NameFarEast = GetFont("仿宋_GB2312", "仿宋", "华文仿宋")
         .NameAscii = "Times New Roman"
-        .NameOther = "Times New Roman"
         .Size = FONT_SIZE_SAN
         .Bold = False
     End With
     With para.Format
-        .Alignment = wdAlignParagraphLeft
-        .LineSpacingRule = wdLineSpaceExactly
-        .LineSpacing = LINE_SPACING_28
-        .SpaceBefore = 8
-        .SpaceAfter = 8
+        .Alignment = 0: .LineSpacingRule = 4: .LineSpacing = LINE_SPACING_28
+        .SpaceBefore = 8: .SpaceAfter = 8
         ' 根据格式模式设置缩进
         If g_FormatMode = "government" Then
-            ' 政府交付版：首行缩进
-            .FirstLineIndent = indentValue
-            .LeftIndent = 0
+            .FirstLineIndent = indentValue: .LeftIndent = 0
         Else
-            ' GB/T 9704标准：左缩进
-            .FirstLineIndent = 0
-            .LeftIndent = indentValue
+            .FirstLineIndent = 0: .LeftIndent = indentValue
         End If
     End With
 End Sub
 
 Private Sub ApplyLevel5Style(para As Paragraph)
     Dim indentValue As Single
+    On Error Resume Next
     indentValue = CentimetersToPoints(0.85) * 2  ' 2字符
 
     With para.Range.Font
         .NameFarEast = GetFont("仿宋_GB2312", "仿宋", "华文仿宋")
         .NameAscii = "Times New Roman"
-        .NameOther = "Times New Roman"
         .Size = FONT_SIZE_SAN
         .Bold = False
     End With
     With para.Format
-        .Alignment = wdAlignParagraphLeft
-        .LineSpacingRule = wdLineSpaceExactly
-        .LineSpacing = LINE_SPACING_28
-        .SpaceBefore = 8
-        .SpaceAfter = 8
+        .Alignment = 0: .LineSpacingRule = 4: .LineSpacing = LINE_SPACING_28
+        .SpaceBefore = 8: .SpaceAfter = 8
         ' 根据格式模式设置缩进
         If g_FormatMode = "government" Then
-            ' 政府交付版：首行缩进
-            .FirstLineIndent = indentValue
-            .LeftIndent = 0
+            .FirstLineIndent = indentValue: .LeftIndent = 0
         Else
-            ' GB/T 9704标准：左缩进
-            .FirstLineIndent = 0
-            .LeftIndent = indentValue
+            .FirstLineIndent = 0: .LeftIndent = indentValue
         End If
     End With
 End Sub
 
 Private Sub ApplyLevel6Style(para As Paragraph)
+    On Error Resume Next
     With para.Range.Font
         .NameFarEast = GetFont("仿宋_GB2312", "仿宋", "华文仿宋")
         .NameAscii = "Times New Roman"
-        .NameOther = "Times New Roman"
         .Size = FONT_SIZE_SAN
         .Bold = False
     End With
     With para.Format
-        .Alignment = wdAlignParagraphJustify
-        .LineSpacingRule = wdLineSpaceExactly
-        .LineSpacing = LINE_SPACING_28
-        .SpaceBefore = 0
-        .SpaceAfter = 0
-        .FirstLineIndent = CentimetersToPoints(0.85) * 2
-        .LeftIndent = 0
+        .Alignment = 3: .LineSpacingRule = 4: .LineSpacing = LINE_SPACING_28
+        .SpaceBefore = 0: .SpaceAfter = 0
+        .FirstLineIndent = CentimetersToPoints(0.85) * 2: .LeftIndent = 0
     End With
 End Sub
 
 Private Sub ApplyBodyStyle(para As Paragraph)
+    On Error Resume Next
     With para.Range.Font
         .NameFarEast = GetFont("仿宋_GB2312", "仿宋", "华文仿宋")
         .NameAscii = "Times New Roman"
-        .NameOther = "Times New Roman"
         .Size = FONT_SIZE_SAN
         .Bold = False
     End With
     With para.Format
-        .Alignment = wdAlignParagraphJustify
-        .LineSpacingRule = wdLineSpaceExactly
-        .LineSpacing = LINE_SPACING_28
-        .SpaceBefore = 0
-        .SpaceAfter = 0
-        .FirstLineIndent = CentimetersToPoints(0.85) * 2
-        .LeftIndent = 0
+        .Alignment = 3: .LineSpacingRule = 4: .LineSpacing = LINE_SPACING_28
+        .SpaceBefore = 0: .SpaceAfter = 0
+        .FirstLineIndent = CentimetersToPoints(0.85) * 2: .LeftIndent = 0
     End With
 End Sub
 
 Private Sub ApplyTableTitleStyle(para As Paragraph)
+    On Error Resume Next
     With para.Range.Font
         .NameFarEast = GetFont("黑体", "微软雅黑", "宋体")
         .NameAscii = "Times New Roman"
-        .NameOther = "Times New Roman"
         .Size = FONT_SIZE_XIAOSI
         .Bold = False
     End With
     With para.Format
-        .Alignment = wdAlignParagraphCenter
-        .LineSpacingRule = wdLineSpaceSingle
-        .SpaceBefore = 8
-        .SpaceAfter = 8
-        .FirstLineIndent = 0
-        .LeftIndent = 0
+        .Alignment = 1: .LineSpacingRule = 0
+        .SpaceBefore = 8: .SpaceAfter = 8: .FirstLineIndent = 0: .LeftIndent = 0
     End With
 End Sub
 
 Private Sub ApplyFigureTitleStyle(para As Paragraph)
+    On Error Resume Next
     With para.Range.Font
         .NameFarEast = GetFont("黑体", "微软雅黑", "宋体")
         .NameAscii = "Times New Roman"
-        .NameOther = "Times New Roman"
         .Size = FONT_SIZE_XIAOSI
         .Bold = False
     End With
     With para.Format
-        .Alignment = wdAlignParagraphCenter
-        .LineSpacingRule = wdLineSpaceSingle
-        .SpaceBefore = 0
-        .SpaceAfter = 0
-        .FirstLineIndent = 0
-        .LeftIndent = 0
+        .Alignment = 1: .LineSpacingRule = 0
+        .SpaceBefore = 0: .SpaceAfter = 0: .FirstLineIndent = 0: .LeftIndent = 0
     End With
-End Sub
-
-'==============================================================================
-' 混合文本格式化
-'==============================================================================
-
-Private Sub FormatMixedText(para As Paragraph)
-    Dim rng As Range
-    Dim i As Long
-    Dim charCode As Long
-    
-    Set rng = para.Range
-    
-    For i = rng.Start To rng.End - 1
-        Dim charRange As Range
-        Set charRange = ActiveDocument.Range(i, i + 1)
-        charCode = AscW(charRange.Text)
-        If (charCode >= 32 And charCode <= 126) Then
-            charRange.Font.Name = "Times New Roman"
-        End If
-    Next i
 End Sub
 
 '==============================================================================
@@ -750,30 +717,36 @@ End Function
 '==============================================================================
 
 Private Sub AddPageNumber()
-    Dim sec As Section, ftr As HeaderFooter, fld As Field, rng As Range
+    Dim sec As Section, ftr As HeaderFooter, rng As Range
+    
+    On Error Resume Next
+    ActiveDocument.ActiveWindow.View.ShowFieldCodes = False
     
     For Each sec In ActiveDocument.Sections
-        Set ftr = sec.Footers(wdHeaderFooterPrimary)
+        Set ftr = sec.Footers(1)
         ftr.Range.Delete
         
         Set rng = ftr.Range
         rng.InsertAfter ChrW(&H2014) & " "
         
         Set rng = ftr.Range
-        rng.Collapse Direction:=wdCollapseEnd
-        Set fld = ftr.Range.Fields.Add(Range:=rng, Type:=wdFieldPage)
+        rng.Collapse Direction:=0
+        ftr.Range.Fields.Add Range:=rng, Type:=33
         
         Set rng = ftr.Range
-        rng.Collapse Direction:=wdCollapseEnd
+        rng.Collapse Direction:=0
         rng.InsertAfter " " & ChrW(&H2014)
         
         With ftr.Range
-            .ParagraphFormat.Alignment = wdAlignParagraphCenter
+            .ParagraphFormat.Alignment = 1
             .Font.Name = "宋体"
-            .Font.NameFarEast = "宋体"
             .Font.Size = FONT_SIZE_SI
         End With
+        
+        ftr.Range.Fields.Update
     Next sec
+    
+    ActiveDocument.Fields.Update
 End Sub
 
 '==============================================================================
@@ -788,12 +761,13 @@ Public Sub UpdatePageNumbers()
 End Sub
 
 Public Sub AddHeader(headerText As String)
+    On Error Resume Next
     Dim hdr As HeaderFooter
-    Set hdr = ActiveDocument.Sections(1).Headers(wdHeaderFooterPrimary)
+    Set hdr = ActiveDocument.Sections(1).Headers(1)
     hdr.Range.Delete
     With hdr.Range
         .Text = headerText
-        .ParagraphFormat.Alignment = wdAlignParagraphCenter
+        .ParagraphFormat.Alignment = 1
         .Font.NameFarEast = GetFont("仿宋_GB2312", "仿宋", "华文仿宋")
         .Font.NameAscii = "Times New Roman"
         .Font.Size = FONT_SIZE_SAN
@@ -802,15 +776,15 @@ End Sub
 
 Public Sub FormatAllTables()
     Dim tbl As Table, cel As Cell, para As Paragraph
+    On Error Resume Next
     For Each tbl In ActiveDocument.Tables
-        tbl.Rows.Alignment = wdAlignRowCenter
+        tbl.Rows.Alignment = 1
         For Each cel In tbl.Range.Cells
             For Each para In cel.Range.Paragraphs
                 para.Range.Font.NameFarEast = GetFont("仿宋_GB2312", "仿宋", "华文仿宋")
                 para.Range.Font.NameAscii = "Times New Roman"
                 para.Range.Font.Size = FONT_SIZE_XIAOSI
-                para.Format.Alignment = wdAlignParagraphCenter
-                para.Format.LineSpacingRule = wdLineSpaceSingle
+                para.Format.Alignment = 1
             Next para
         Next cel
     Next tbl
@@ -818,13 +792,7 @@ Public Sub FormatAllTables()
 End Sub
 
 Public Sub FormatTitle()
-    Dim para As Paragraph, cw As Single, undoRec As UndoRecord
-    
-    On Error GoTo ErrorHandler
-    
-    Set undoRec = Application.UndoRecord
-    undoRec.StartCustomRecord "标题格式化"
-    
+    Dim para As Paragraph, cw As Single
     cw = CentimetersToPoints(0.85) * 2
     For Each para In Selection.Paragraphs
         para.Format.LeftIndent = 0
@@ -833,15 +801,7 @@ Public Sub FormatTitle()
         para.Format.SpaceBefore = 6
         para.Format.SpaceAfter = 6
     Next para
-    
-    undoRec.EndCustomRecord
     MsgBox "标题格式化完成！", vbInformation, "标题格式化"
-    Exit Sub
-    
-ErrorHandler:
-    On Error Resume Next
-    If Not undoRec Is Nothing Then undoRec.EndCustomRecord
-    MsgBox "发生错误：" & Err.Description, vbCritical, "错误"
 End Sub
 
 '==============================================================================

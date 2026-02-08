@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python gongwen_formatter.py:*)",
+      "Bash(python web_server.py:*)",
+      "Bash(timeout 3 tail:*)",
+      "Bash(exit 0)",
+      "Bash(python test_format.py:*)",
+      "Bash(ls:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}

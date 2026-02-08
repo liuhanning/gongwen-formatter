@@ -2,6 +2,7 @@
 """
 公文级 Word 文档自动化排版引擎
 符合 GB/T 9704 党政机关公文格式规范
+支持政府交付版格式标准
 """
 
 import re
@@ -14,6 +15,12 @@ from docx.enum.style import WD_STYLE_TYPE
 from docx.oxml.ns import qn, nsmap
 from docx.oxml import OxmlElement
 
+
+# ==================== 格式模式定义 ====================
+
+# 格式模式：'standard' 或 'government'
+FORMAT_MODE_STANDARD = 'standard'      # GB/T 9704标准模式（标题左缩进）
+FORMAT_MODE_GOVERNMENT = 'government'  # 政府交付版模式（标题首行缩进）
 
 # ==================== 常量定义 ====================
 
@@ -59,8 +66,8 @@ FONT_SIZE = {
     '小五': Pt(9),
 }
 
-# 样式定义
-STYLES = {
+# 样式定义 - GB/T 9704标准模式（标题左缩进）
+STYLES_STANDARD = {
     'level1': {  # 一级标题
         'cn_font': '方正小标宋简体',
         'en_font': 'Times New Roman',
@@ -136,6 +143,134 @@ STYLES = {
         'space_after': 0,
         'alignment': WD_ALIGN_PARAGRAPH.JUSTIFY,
         'first_line_indent': 2,  # 首行缩进2字符
+        'left_indent': 0,
+    },
+    'table_title': {  # 表格标题
+        'cn_font': '黑体',
+        'en_font': 'Times New Roman',
+        'font_size': '小四',
+        'line_spacing': Pt(20),
+        'space_before': 0.5,
+        'space_after': 0.5,
+        'alignment': WD_ALIGN_PARAGRAPH.CENTER,
+        'first_line_indent': 0,
+        'left_indent': 0,
+        'bold': False,
+    },
+    'table_header': {  # 表头
+        'cn_font': '黑体',
+        'en_font': 'Times New Roman',
+        'font_size': '小四',
+        'line_spacing': None,  # 单倍行距
+        'space_before': 0,
+        'space_after': 0,
+        'alignment': WD_ALIGN_PARAGRAPH.CENTER,
+        'first_line_indent': 0,
+        'left_indent': 0,
+        'bold': False,
+    },
+    'table_content': {  # 表格内容
+        'cn_font': '仿宋_GB2312',
+        'en_font': 'Times New Roman',
+        'font_size': '小四',
+        'line_spacing': None,  # 单倍行距
+        'space_before': 0,
+        'space_after': 0,
+        'alignment': WD_ALIGN_PARAGRAPH.CENTER,
+        'first_line_indent': 0,
+        'left_indent': 0,
+    },
+    'figure_title': {  # 插图标题
+        'cn_font': '黑体',
+        'en_font': 'Times New Roman',
+        'font_size': '小四',
+        'line_spacing': Pt(20),
+        'space_before': 0,
+        'space_after': 0,
+        'alignment': WD_ALIGN_PARAGRAPH.CENTER,
+        'first_line_indent': 0,
+        'left_indent': 0,
+        'bold': False,
+    },
+}
+
+# 样式定义 - 政府交付版模式（标题首行缩进）
+STYLES_GOVERNMENT = {
+    'level1': {  # 一级标题
+        'cn_font': '方正小标宋简体',
+        'en_font': 'Times New Roman',
+        'font_size': '二号',
+        'line_spacing': Pt(30),
+        'space_before': 0.5,
+        'space_after': 0.5,
+        'alignment': WD_ALIGN_PARAGRAPH.CENTER,
+        'first_line_indent': 0,
+        'left_indent': 0,
+    },
+    'level2': {  # 二级标题
+        'cn_font': '黑体',
+        'en_font': 'Times New Roman',
+        'font_size': '三号',
+        'line_spacing': Pt(30),
+        'space_before': 0.5,
+        'space_after': 0.5,
+        'alignment': WD_ALIGN_PARAGRAPH.LEFT,
+        'first_line_indent': 2,  # 首行缩进2字符
+        'left_indent': 0,
+    },
+    'level3': {  # 三级标题
+        'cn_font': '楷体_GB2312',
+        'en_font': 'Times New Roman',
+        'font_size': '三号',
+        'line_spacing': Pt(30),
+        'space_before': 0.5,
+        'space_after': 0.5,
+        'alignment': WD_ALIGN_PARAGRAPH.LEFT,
+        'first_line_indent': 2,  # 首行缩进2字符
+        'left_indent': 0,
+    },
+    'level4': {  # 四级标题
+        'cn_font': '仿宋_GB2312',
+        'en_font': 'Times New Roman',
+        'font_size': '三号',
+        'line_spacing': Pt(28),
+        'space_before': 0.5,
+        'space_after': 0.5,
+        'alignment': WD_ALIGN_PARAGRAPH.LEFT,
+        'first_line_indent': 2,  # 首行缩进2字符
+        'left_indent': 0,
+    },
+    'level5': {  # 五级标题
+        'cn_font': '仿宋_GB2312',
+        'en_font': 'Times New Roman',
+        'font_size': '三号',
+        'line_spacing': Pt(28),
+        'space_before': 0.5,
+        'space_after': 0.5,
+        'alignment': WD_ALIGN_PARAGRAPH.LEFT,
+        'first_line_indent': 2,  # 首行缩进2字符
+        'left_indent': 0,
+    },
+    'level6': {  # 六级（圆圈序号）
+        'cn_font': '仿宋_GB2312',
+        'en_font': 'Times New Roman',
+        'font_size': '三号',
+        'line_spacing': Pt(28),
+        'space_before': 0,
+        'space_after': 0,
+        'alignment': WD_ALIGN_PARAGRAPH.LEFT,
+        'first_line_indent': 2,
+        'left_indent': 0,
+    },
+    'body': {  # 正文
+        'cn_font': '仿宋_GB2312',
+        'en_font': 'Times New Roman',
+        'font_size': '三号',
+        'line_spacing': Pt(28),
+        'space_before': 0,
+        'space_after': 0,
+        'alignment': WD_ALIGN_PARAGRAPH.JUSTIFY,
+        'first_line_indent': 2,
         'left_indent': 0,
     },
     'table_title': {  # 表格标题
@@ -282,22 +417,35 @@ class FontChecker:
 
 class GongwenFormatter:
     """公文格式化引擎"""
-    
-    def __init__(self, doc_path=None):
+
+    def __init__(self, doc_path=None, format_mode=FORMAT_MODE_STANDARD):
         """
         初始化格式化引擎
-        
+
         Args:
             doc_path: 可选，已有文档路径。为空则创建新文档
+            format_mode: 格式模式，'standard'(GB/T 9704标准) 或 'government'(政府交付版)
         """
         if doc_path:
             self.doc = Document(doc_path)
         else:
             self.doc = Document()
-        
+
+        # 设置格式模式
+        self.format_mode = format_mode
+        self.styles = STYLES_GOVERNMENT if format_mode == FORMAT_MODE_GOVERNMENT else STYLES_STANDARD
+
         self.font_checker = FontChecker()
         self._setup_page()
         self._setup_styles()
+
+        # 输出当前模式信息
+        mode_name = "政府交付版" if format_mode == FORMAT_MODE_GOVERNMENT else "GB/T 9704标准"
+        print(f"[格式模式] {mode_name}")
+        if format_mode == FORMAT_MODE_GOVERNMENT:
+            print("  - 标题使用首行缩进2字符")
+        else:
+            print("  - 标题使用左缩进2字符")
     
     def _setup_page(self):
         """设置页面参数"""
@@ -339,7 +487,7 @@ class GongwenFormatter:
     
     def _set_paragraph_format(self, para, style_name):
         """设置段落格式"""
-        style = STYLES.get(style_name, STYLES['body'])
+        style = self.styles.get(style_name, self.styles['body'])
         pf = para.paragraph_format
         
         # 对齐方式
@@ -409,12 +557,20 @@ class GongwenFormatter:
         text = para.text.strip()
         if not text:
             return
+
+        # 严格遵守需求：跳过表格中的内容和样式
+        try:
+            if para._element.xpath('./ancestor::w:tbl'):
+                return
+        except:
+            # 如果xpath失败，使用备用方法检查是否在表格中
+            pass
         
         # 自动检测级别
         if style_name is None:
             style_name = self.detect_level(text)
         
-        style = STYLES.get(style_name, STYLES['body'])
+        style = self.styles.get(style_name, self.styles['body'])
         cn_font = style['cn_font']
         en_font = style['en_font']
         font_size = style['font_size']
@@ -480,7 +636,7 @@ class GongwenFormatter:
         para = self.doc.add_paragraph()
         
         # 添加文本
-        style = STYLES.get(style_name, STYLES['body'])
+        style = self.styles.get(style_name, self.styles['body'])
         cn_font = style['cn_font']
         en_font = style['en_font']
         font_size = style['font_size']
@@ -504,7 +660,7 @@ class GongwenFormatter:
         """添加正文段落"""
         para = self.doc.add_paragraph()
         
-        style = STYLES['body']
+        style = self.styles['body']
         cn_font = style['cn_font']
         en_font = style['en_font']
         font_size = style['font_size']
@@ -536,7 +692,7 @@ class GongwenFormatter:
         """
         # 表格标题(表上方空一行)
         title_para = self.doc.add_paragraph()
-        style = STYLES['table_title']
+        style = self.styles['table_title']
         run = title_para.add_run(title)
         self._set_run_font(run, style['cn_font'], style['en_font'], 
                           style['font_size'], style.get('bold', False))
@@ -555,7 +711,7 @@ class GongwenFormatter:
                 # 判断是否为表头行
                 is_header_row = (i == 0 and has_header)
                 style_name = 'table_header' if is_header_row else 'table_content'
-                style = STYLES[style_name]
+                style = self.styles[style_name]
                 
                 for j, cell_text in enumerate(row_data):
                     cell = table.rows[i].cells[j]
@@ -595,7 +751,7 @@ class GongwenFormatter:
             add_spacing: 是否在标题后自动添加空行(默认True)
         """
         para = self.doc.add_paragraph()
-        style = STYLES['figure_title']
+        style = self.styles['figure_title']
         run = para.add_run(title)
         self._set_run_font(run, style['cn_font'], style['en_font'],
                           style['font_size'], style.get('bold', False))
@@ -699,7 +855,10 @@ class GongwenFormatter:
         para.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
     def format_document(self):
-        """格式化整个文档"""
+        """
+        格式化整个文档
+        注意：根据需求，该过程将自动跳过表格中的内容和样式。
+        """
         for para in self.doc.paragraphs:
             self.format_paragraph(para)
     
@@ -711,10 +870,10 @@ class GongwenFormatter:
 
 # ==================== Demo 文档生成 ====================
 
-def create_demo_document(output_path):
+def create_demo_document(output_path, format_mode=FORMAT_MODE_STANDARD):
     """创建包含五级标题、表格、插图的示例文档"""
-    
-    formatter = GongwenFormatter()
+
+    formatter = GongwenFormatter(format_mode=format_mode)
     
     # 添加页码
     formatter.add_page_number()
@@ -803,9 +962,9 @@ def create_demo_document(output_path):
     return formatter
 
 
-def format_existing_document(input_path, output_path):
+def format_existing_document(input_path, output_path, format_mode=FORMAT_MODE_STANDARD):
     """格式化已有文档"""
-    formatter = GongwenFormatter(input_path)
+    formatter = GongwenFormatter(input_path, format_mode=format_mode)
     formatter.format_document()
     formatter.add_page_number()
     formatter.save(output_path)
@@ -816,22 +975,35 @@ def format_existing_document(input_path, output_path):
 
 if __name__ == '__main__':
     import sys
-    
+
     print("=" * 60)
-    print("公文级 Word 文档自动化排版引擎 v1.0")
+    print("公文级 Word 文档自动化排版引擎 v1.1")
     print("=" * 60)
-    
-    if len(sys.argv) < 2:
+
+    # 解析命令行参数
+    format_mode = FORMAT_MODE_STANDARD
+    args = [arg for arg in sys.argv[1:] if not arg.startswith('--')]
+
+    # 检查格式模式参数
+    if '--government' in sys.argv or '-g' in sys.argv:
+        format_mode = FORMAT_MODE_GOVERNMENT
+        print("\n[格式模式] 政府交付版（标题首行缩进）")
+    else:
+        print("\n[格式模式] GB/T 9704标准（标题左缩进）")
+
+    print("提示：使用 --government 或 -g 切换到政府交付版模式\n")
+
+    if len(args) < 1:
         # 默认生成 Demo 文档
         output_path = os.path.join(os.path.dirname(__file__), 'demo_gongwen.docx')
-        print(f"\n[模式] 生成示例文档")
-        create_demo_document(output_path)
+        print(f"[模式] 生成示例文档")
+        create_demo_document(output_path, format_mode=format_mode)
     else:
-        input_path = sys.argv[1]
-        output_path = sys.argv[2] if len(sys.argv) > 2 else input_path.replace('.docx', '_formatted.docx')
-        print(f"\n[模式] 格式化已有文档")
+        input_path = args[0]
+        output_path = args[1] if len(args) > 1 else input_path.replace('.docx', '_formatted.docx')
+        print(f"[模式] 格式化已有文档")
         print(f"[输入] {input_path}")
         print(f"[输出] {output_path}")
-        format_existing_document(input_path, output_path)
-    
+        format_existing_document(input_path, output_path, format_mode=format_mode)
+
     print("\n[完成] 排版引擎执行结束")

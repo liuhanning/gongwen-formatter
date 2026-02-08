@@ -8,7 +8,7 @@ from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
 import os
 import tempfile
-from gongwen_formatter import GongwenFormatter, create_demo_document, format_existing_document
+from gongwen_formatter import GongwenFormatter, create_demo_document, format_existing_document, FORMAT_MODE_STANDARD, FORMAT_MODE_GOVERNMENT
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
@@ -25,25 +25,30 @@ def format_document():
         # Check if file was uploaded
         if 'file' not in request.files:
             return jsonify({'error': '未上传文件'}), 400
-        
+
         file = request.files['file']
-        
+
         if file.filename == '':
             return jsonify({'error': '文件名为空'}), 400
-        
+
         if not file.filename.endswith('.docx'):
             return jsonify({'error': '仅支持 .docx 格式'}), 400
-        
+
+        # 获取格式模式参数（默认为标准模式）
+        format_mode = request.form.get('format_mode', FORMAT_MODE_STANDARD)
+        if format_mode not in [FORMAT_MODE_STANDARD, FORMAT_MODE_GOVERNMENT]:
+            format_mode = FORMAT_MODE_STANDARD
+
         # Save uploaded file to temp directory
         with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as tmp_input:
             file.save(tmp_input.name)
             input_path = tmp_input.name
-        
+
         # Create output file path
         output_path = input_path.replace('.docx', '_formatted.docx')
-        
-        # Format the document
-        format_existing_document(input_path, output_path)
+
+        # Format the document with selected mode
+        format_existing_document(input_path, output_path, format_mode=format_mode)
         
         # Send the formatted file
         response = send_file(
@@ -72,12 +77,18 @@ def format_document():
 @app.route('/api/create-demo', methods=['POST'])
 def create_demo():
     try:
+        # 获取格式模式参数
+        data = request.get_json() or {}
+        format_mode = data.get('format_mode', FORMAT_MODE_STANDARD)
+        if format_mode not in [FORMAT_MODE_STANDARD, FORMAT_MODE_GOVERNMENT]:
+            format_mode = FORMAT_MODE_STANDARD
+
         # Create temp file for demo
         with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as tmp_output:
             output_path = tmp_output.name
-        
-        # Create demo document
-        create_demo_document(output_path)
+
+        # Create demo document with selected mode
+        create_demo_document(output_path, format_mode=format_mode)
         
         # Send the demo file
         response = send_file(
