@@ -1,15 +1,24 @@
 Attribute VB_Name = "GongwenFormatter"
 '==============================================================================
-' å…¬æ–‡æ ¼å¼åŒ–å·¥å…· (Microsoft Word ç‰ˆæœ¬) v1.1
-' ç¬¦åˆ GB/T 9704 æ ‡å‡† + æ”¿åºœäº¤ä»˜ç‰ˆæ ¼å¼æ ‡å‡†
+' ¹«ÎÄ¸ñÊ½»¯¹¤¾ß (Microsoft Word °æ±¾) v1.3
+' ·ûºÏ GB/T 9704 ±ê×¼ + Õş¸®½»¸¶°æ¸ñÊ½±ê×¼
+' Óë WPS °æ¹æÔòÍ¬²½£¬ÊÊÓÃÓÚ Microsoft Word
 '==============================================================================
 
 Option Explicit
 
-' æ ¼å¼æ¨¡å¼å…¨å±€å˜é‡
-Private g_FormatMode As String  ' "standard" æˆ– "government"
+' ¸ñÊ½Ä£Ê½È«¾Ö±äÁ¿
+Private g_FormatMode As String  ' "standard" »ò "government"
 
-' é¡µé¢è®¾ç½® (å•ä½ï¼šç£…ï¼Œ1cm=28.35pt, 1mm=2.835pt)
+' ÎÄµµ½á¹¹±ê¼Ç
+Private g_CoverTitleEnd As Long
+Private g_CoverOrgIndex As Long
+Private g_CoverDateIndex As Long
+Private g_TocTitleIndex As Long
+Private g_TocEndIndex As Long
+Private g_BodyStartIndex As Long
+
+' Ò³ÃæÉèÖÃ (µ¥Î»£º°õ£¬1cm=28.35pt, 1mm=2.835pt)
 Private Const PAGE_MARGIN_TOP As Single = 104.88      ' 37mm
 Private Const PAGE_MARGIN_BOTTOM As Single = 99.225   ' 35mm
 Private Const PAGE_MARGIN_LEFT As Single = 79.38      ' 28mm
@@ -17,118 +26,126 @@ Private Const PAGE_MARGIN_RIGHT As Single = 73.71     ' 26mm
 Private Const HEADER_DISTANCE As Single = 51.03       ' 1.8cm
 Private Const FOOTER_DISTANCE As Single = 51.03       ' 1.8cm
 
-' å­—å· (å•ä½ï¼šç£…)
-Private Const FONT_SIZE_ER As Single = 22             ' äºŒå·
-Private Const FONT_SIZE_SAN As Single = 16            ' ä¸‰å·
-Private Const FONT_SIZE_XIAOSI As Single = 12         ' å°å››
-Private Const FONT_SIZE_SI As Single = 14             ' å››å·
+' ×ÖºÅ (µ¥Î»£º°õ)
+Private Const FONT_SIZE_ER As Single = 22             ' ¶şºÅ
+Private Const FONT_SIZE_SAN As Single = 16            ' ÈıºÅ
+Private Const FONT_SIZE_SI As Single = 14             ' ËÄºÅ
+Private Const FONT_SIZE_XIAOSI As Single = 12         ' Ğ¡ËÄ
+Private Const FONT_SIZE_WU As Single = 10.5           ' ÎåºÅ
+Private Const FONT_COLOR_BLACK As Long = 0             ' ÏÔÊ½ºÚÉ«
 
-' è¡Œè· (å•ä½ï¼šç£…)
-Private Const LINE_SPACING_30 As Single = 30
-Private Const LINE_SPACING_28 As Single = 28
+' ĞĞ¾à (µ¥Î»£º°õ)
+Private Const LINE_SPACING_24 As Single = 24          ' ·âÃæ±êÌâ line=480(auto)
+Private Const LINE_SPACING_35 As Single = 35          ' ·âÃæµ¥Î»/ÈÕÆÚ¹Ì¶¨Öµ35°õ
+Private Const LINE_SPACING_18 As Single = 18          ' ÕıÎÄ/±êÌâ line=360(auto)
+
+' Word/WPS ĞĞ¾à¹æÔò
+Private Const LINE_RULE_EXACTLY As Long = 4           ' wdLineSpaceExactly
+Private Const LINE_RULE_MULTIPLE As Long = 5          ' wdLineSpaceMultiple
+
+' Word/WPS ÄÚÖÃÑùÊ½Óë´ó¸Ù¼¶±ğ
+Private Const STYLE_NORMAL As Long = -1             ' wdStyleNormal
+Private Const STYLE_HEADING_2 As Long = -3          ' wdStyleHeading2 / ±êÌâ 2
+Private Const STYLE_HEADING_3 As Long = -4          ' wdStyleHeading3 / ±êÌâ 3
+Private Const OUTLINE_LEVEL_2 As Long = 2           ' wdOutlineLevel2
+Private Const OUTLINE_LEVEL_3 As Long = 3           ' wdOutlineLevel3
+Private Const OUTLINE_LEVEL_BODY As Long = 10       ' wdOutlineLevelBodyText
+Private Const PAGE_NUMBER_ALIGN_CENTER As Long = 1    ' wdAlignPageNumberCenter
 
 '==============================================================================
-' æ ¼å¼æ¨¡å¼é€‰æ‹©å¯¹è¯æ¡†
+' ¸ñÊ½Ä£Ê½Ñ¡Ôñ£¨WPS°æ£ºÖ±½Ó¹Ì¶¨ÎªÕş¸®½»¸¶°æ£¬²»µ¯´°£©
 '==============================================================================
 
-Public Function SelectFormatMode() As String
-    Dim result As VbMsgBoxResult
-
-    result = MsgBox("è¯·é€‰æ‹©æ ¼å¼æ¨¡å¼ï¼š" & vbCrLf & vbCrLf & _
-                    "ã€æ˜¯ã€‘= GB/T 9704æ ‡å‡†æ¨¡å¼" & vbCrLf & _
-                    "      ï¼ˆæ ‡é¢˜å·¦ç¼©è¿›2å­—ç¬¦ï¼‰" & vbCrLf & vbCrLf & _
-                    "ã€å¦ã€‘= æ”¿åºœäº¤ä»˜ç‰ˆæ¨¡å¼" & vbCrLf & _
-                    "      ï¼ˆæ ‡é¢˜é¦–è¡Œç¼©è¿›2å­—ç¬¦ï¼‰" & vbCrLf & vbCrLf & _
-                    "ã€å–æ¶ˆã€‘= å–æ¶ˆæ“ä½œ", _
-                    vbYesNoCancel + vbQuestion, "é€‰æ‹©æ ¼å¼æ¨¡å¼")
-
-    If result = vbYes Then
-        SelectFormatMode = "standard"
-    ElseIf result = vbNo Then
-        SelectFormatMode = "government"
-    Else
-        SelectFormatMode = ""  ' å–æ¶ˆ
-    End If
+Private Function SelectFormatMode() As String
+    g_FormatMode = "government"
+    SelectFormatMode = g_FormatMode
 End Function
 
 '==============================================================================
-' ç¬¦å·æ›¿æ¢åŠŸèƒ½
+' ·ûºÅÌæ»»¹¦ÄÜ
 '==============================================================================
 
 Public Sub ReplaceSymbols()
-    Dim undoRec As UndoRecord
-    
+    Dim undoRec As Object
+
     Application.ScreenUpdating = False
-    
-    On Error GoTo ErrorHandler
-    
+
+    On Error Resume Next
     Set undoRec = Application.UndoRecord
-    undoRec.StartCustomRecord "ç¬¦å·æ›¿æ¢"
-    
-    ' 1. æ›¿æ¢è‹±æ–‡é€—å·ä¸ºä¸­æ–‡é€—å·
+    If Not undoRec Is Nothing Then
+        undoRec.StartCustomRecord "·ûºÅÌæ»»"
+    End If
+    On Error GoTo 0
+
+    On Error GoTo ErrorHandler
+
+    ' 1. Ìæ»»Ó¢ÎÄ¶ººÅÎªÖĞÎÄ¶ººÅ
     Call DoReplace(",", ChrW(&HFF0C))
-    
-    ' 2. æ›¿æ¢è‹±æ–‡å·¦æ‹¬å·ä¸ºä¸­æ–‡å·¦æ‹¬å·
+
+    ' 2. Ìæ»»Ó¢ÎÄ×óÀ¨ºÅÎªÖĞÎÄ×óÀ¨ºÅ
     Call DoReplace("(", ChrW(&HFF08))
-    
-    ' 3. æ›¿æ¢è‹±æ–‡å³æ‹¬å·ä¸ºä¸­æ–‡å³æ‹¬å·
+
+    ' 3. Ìæ»»Ó¢ÎÄÓÒÀ¨ºÅÎªÖĞÎÄÓÒÀ¨ºÅ
     Call DoReplace(")", ChrW(&HFF09))
-    
-    ' 4. æ›¿æ¢è‹±æ–‡å†’å·ä¸ºä¸­æ–‡å†’å·
+
+    ' 4. Ìæ»»Ó¢ÎÄÃ°ºÅÎªÖĞÎÄÃ°ºÅ
     Call DoReplace(":", ChrW(&HFF1A))
-    
-    ' 5. æ™ºèƒ½æ›¿æ¢å¼•å·ï¼ˆäº¤æ›¿å·¦å³å¼•å·ï¼‰
+    Call NormalizeHeadingNumberDots
+
+    ' 5. ÖÇÄÜÌæ»»ÒıºÅ£¨½»Ìæ×óÓÒÒıºÅ£©
     Call ReplaceQuotesInternal
-    
-    undoRec.EndCustomRecord
-    
+
+    On Error Resume Next
+    If Not undoRec Is Nothing Then undoRec.EndCustomRecord
+    On Error GoTo 0
+
     Application.ScreenUpdating = True
-    
-    MsgBox "ç¬¦å·æ›¿æ¢å®Œæˆï¼" & vbCrLf & vbCrLf & _
-           "å·²æ›¿æ¢ï¼š" & vbCrLf & _
-           "1. è‹±æ–‡é€—å· , â†’ ä¸­æ–‡é€—å· " & ChrW(&HFF0C) & vbCrLf & _
-           "2. è‹±æ–‡æ‹¬å· () â†’ ä¸­æ–‡æ‹¬å· " & ChrW(&HFF08) & ChrW(&HFF09) & vbCrLf & _
-           "3. è‹±æ–‡å†’å· : â†’ ä¸­æ–‡å†’å· " & ChrW(&HFF1A) & vbCrLf & _
-           "4. è‹±æ–‡å¼•å· "" â†’ ä¸­æ–‡å¼•å· " & ChrW(&H201C) & ChrW(&H201D) & vbCrLf & vbCrLf & _
-           "æç¤ºï¼šæŒ‰ Ctrl+Z å¯æ’¤é”€", vbInformation, "ç¬¦å·æ›¿æ¢"
+
+    MsgBox "·ûºÅÌæ»»Íê³É£¡" & vbCrLf & vbCrLf & _
+           "ÒÑÌæ»»£º" & vbCrLf & _
+           "1. Ó¢ÎÄ¶ººÅ , -> ÖĞÎÄ¶ººÅ " & ChrW(&HFF0C) & vbCrLf & _
+           "2. Ó¢ÎÄÀ¨ºÅ () -> ÖĞÎÄÀ¨ºÅ " & ChrW(&HFF08) & ChrW(&HFF09) & vbCrLf & _
+           "3. Ó¢ÎÄÃ°ºÅ : -> ÖĞÎÄÃ°ºÅ " & ChrW(&HFF1A) & vbCrLf & _
+           "4. Ó¢ÎÄÒıºÅ -> ÖĞÎÄÒıºÅ " & ChrW(&H201C) & ChrW(&H201D) & vbCrLf & vbCrLf & _
+           "ÌáÊ¾£º°´ Ctrl+Z ¿É³·Ïú", vbInformation, "·ûºÅÌæ»»"
     Exit Sub
-    
+
 ErrorHandler:
     On Error Resume Next
     If Not undoRec Is Nothing Then undoRec.EndCustomRecord
     Application.ScreenUpdating = True
-    MsgBox "å‘ç”Ÿé”™è¯¯ï¼š" & Err.Description & vbCrLf & "é”™è¯¯ä»£ç ï¼š" & Err.Number, vbCritical, "é”™è¯¯"
+    MsgBox "·¢Éú´íÎó£º" & Err.Description, vbCritical, "´íÎó"
 End Sub
 
-' æ›¿æ¢å‡½æ•° (è·³è¿‡è¡¨æ ¼)
+' Ìæ»»º¯Êı (Ìø¹ı±í¸ñ)
 Private Sub DoReplace(findWhat As String, replaceWith As String)
-    Dim rng As Range
+    Dim rng As Object
     Set rng = ActiveDocument.Range
     With rng.Find
         .ClearFormatting
         .Replacement.ClearFormatting
         .Text = findWhat
         .Forward = True
-        .Wrap = wdFindStop
+        .Wrap = 0 ' wdFindStop
         .Format = False
         .MatchCase = False
         .MatchWholeWord = False
         .MatchWildcards = False
         .MatchSoundsLike = False
         .MatchAllWordForms = False
-        
-        Do While .Execute(Replace:=wdReplaceNone)
-            ' æ£€æŸ¥æ˜¯å¦åœ¨è¡¨æ ¼ä¸­ï¼Œå¦‚æœä¸åœ¨åˆ™æ›¿æ¢
-            If Not rng.Information(wdWithInTable) Then
+
+        Do While .Execute(Replace:=0) ' wdReplaceNone
+            ' ¼ì²éÊÇ·ñÔÚ±í¸ñÖĞ (12=wdWithInTable)
+            If Not rng.Information(12) Then
                 rng.Text = replaceWith
             End If
-            rng.Collapse wdCollapseEnd
+            rng.Collapse 0 ' wdCollapseEnd
         Loop
     End With
 End Sub
 
 '==============================================================================
-' æ™ºèƒ½å¼•å·æ›¿æ¢ï¼ˆäº¤æ›¿å·¦å³å¼•å·ï¼‰
+' ÖÇÄÜÒıºÅÌæ»»£¨½»Ìæ×óÓÒÒıºÅ£©
 '==============================================================================
 
 Public Sub ReplaceQuotesSmart()
@@ -137,25 +154,28 @@ Public Sub ReplaceQuotesSmart()
     Dim txt As String
     Dim i As Long
     Dim isLeft As Boolean
-    Dim undoRec As UndoRecord
+    Dim undoRec As Object
     Dim quoteChar As String
-    
+
     Application.ScreenUpdating = False
-    
-    On Error GoTo ErrorHandler
-    
+
+    On Error Resume Next
     Set undoRec = Application.UndoRecord
-    undoRec.StartCustomRecord "æ™ºèƒ½å¼•å·æ›¿æ¢"
-    
+    If Not undoRec Is Nothing Then
+        undoRec.StartCustomRecord "ÖÇÄÜÒıºÅÌæ»»"
+    End If
+    On Error GoTo 0
+
+    On Error GoTo ErrorHandler
+
     quoteChar = Chr(34)
     isLeft = True
-    
+
     For Each para In ActiveDocument.Paragraphs
-        ' è·³è¿‡è¡¨æ ¼ä¸­çš„æ®µè½
-        If Not para.Range.Information(wdWithInTable) Then
+        If Not para.Range.Information(12) Then ' Ìø¹ı±í¸ñ
             Set rng = para.Range
             txt = rng.Text
-            
+
             If InStr(txt, quoteChar) > 0 Then
                 For i = 1 To Len(txt)
                     If Mid(txt, i, 1) = quoteChar Then
@@ -171,70 +191,23 @@ Public Sub ReplaceQuotesSmart()
             End If
         End If
     Next para
-    
-    undoRec.EndCustomRecord
-    
+
+    On Error Resume Next
+    If Not undoRec Is Nothing Then undoRec.EndCustomRecord
+    On Error GoTo 0
+
     Application.ScreenUpdating = True
-    MsgBox "æ™ºèƒ½å¼•å·æ›¿æ¢å®Œæˆï¼" & vbCrLf & vbCrLf & _
-           "è‹±æ–‡å¼•å·å·²æ›¿æ¢ä¸ºä¸­æ–‡å¼•å·ï¼š" & ChrW(&H201C) & " å’Œ " & ChrW(&H201D) & vbCrLf & vbCrLf & _
-           "æç¤ºï¼šæŒ‰ Ctrl+Z å¯æ’¤é”€", vbInformation, "æ™ºèƒ½å¼•å·"
+    MsgBox "ÖÇÄÜÒıºÅÌæ»»Íê³É£¡", vbInformation, "ÖÇÄÜÒıºÅ"
     Exit Sub
-    
+
 ErrorHandler:
     On Error Resume Next
     If Not undoRec Is Nothing Then undoRec.EndCustomRecord
     Application.ScreenUpdating = True
-    MsgBox "å‘ç”Ÿé”™è¯¯ï¼š" & Err.Description, vbCritical, "é”™è¯¯"
+    MsgBox "·¢Éú´íÎó£º" & Err.Description, vbCritical, "´íÎó"
 End Sub
 
-'==============================================================================
-' å…¨éƒ¨ç¬¦å·æ›¿æ¢ï¼ˆåŒ…å«æ™ºèƒ½å¼•å·ï¼‰
-'==============================================================================
-
-Public Sub ReplaceAllSymbols()
-    Dim undoRec As UndoRecord
-    
-    Application.ScreenUpdating = False
-    
-    On Error GoTo ErrorHandler
-    
-    Set undoRec = Application.UndoRecord
-    undoRec.StartCustomRecord "å…¨éƒ¨ç¬¦å·æ›¿æ¢"
-    
-    ' æ›¿æ¢é€—å·
-    Call DoReplace(",", ChrW(&HFF0C))
-    
-    ' æ›¿æ¢æ‹¬å·
-    Call DoReplace("(", ChrW(&HFF08))
-    Call DoReplace(")", ChrW(&HFF09))
-    
-    ' æ›¿æ¢å†’å·
-    Call DoReplace(":", ChrW(&HFF1A))
-    
-    ' æ™ºèƒ½æ›¿æ¢å¼•å·
-    Call ReplaceQuotesInternal
-    
-    undoRec.EndCustomRecord
-    
-    Application.ScreenUpdating = True
-    
-    MsgBox "å…¨éƒ¨ç¬¦å·æ›¿æ¢å®Œæˆï¼" & vbCrLf & vbCrLf & _
-           "å·²æ›¿æ¢ï¼š" & vbCrLf & _
-           "1. é€—å· , â†’ " & ChrW(&HFF0C) & vbCrLf & _
-           "2. æ‹¬å· () â†’ " & ChrW(&HFF08) & ChrW(&HFF09) & vbCrLf & _
-           "3. å†’å· : â†’ " & ChrW(&HFF1A) & vbCrLf & _
-           "4. å¼•å· "" â†’ " & ChrW(&H201C) & ChrW(&H201D) & " (æ™ºèƒ½äº¤æ›¿)" & vbCrLf & vbCrLf & _
-           "æç¤ºï¼šæŒ‰ Ctrl+Z å¯æ’¤é”€", vbInformation, "ç¬¦å·æ›¿æ¢"
-    Exit Sub
-    
-ErrorHandler:
-    On Error Resume Next
-    If Not undoRec Is Nothing Then undoRec.EndCustomRecord
-    Application.ScreenUpdating = True
-    MsgBox "å‘ç”Ÿé”™è¯¯ï¼š" & Err.Description, vbCritical, "é”™è¯¯"
-End Sub
-
-' å†…éƒ¨å¼•å·æ›¿æ¢å‡½æ•°
+' ÄÚ²¿ÒıºÅÌæ»»º¯Êı
 Private Sub ReplaceQuotesInternal()
     Dim para As Paragraph
     Dim rng As Range
@@ -242,16 +215,15 @@ Private Sub ReplaceQuotesInternal()
     Dim i As Long
     Dim isLeft As Boolean
     Dim quoteChar As String
-    
+
     quoteChar = Chr(34)
     isLeft = True
-    
+
     For Each para In ActiveDocument.Paragraphs
-        ' è·³è¿‡è¡¨æ ¼ä¸­çš„æ®µè½
-        If Not para.Range.Information(wdWithInTable) Then
+        If Not para.Range.Information(12) Then ' Ìø¹ı±í¸ñ
             Set rng = para.Range
             txt = rng.Text
-            
+
             If InStr(txt, quoteChar) > 0 Then
                 For i = 1 To Len(txt)
                     If Mid(txt, i, 1) = quoteChar Then
@@ -270,107 +242,197 @@ Private Sub ReplaceQuotesInternal()
 End Sub
 
 '==============================================================================
-' ä¸»æ ¼å¼åŒ–åŠŸèƒ½
+' È«²¿·ûºÅÌæ»»£¨°üº¬ÖÇÄÜÒıºÅ£©
 '==============================================================================
 
-Public Sub FormatGongwen()
-    Dim undoRec As UndoRecord
-    Dim modeName As String
-
-    ' é€‰æ‹©æ ¼å¼æ¨¡å¼
-    g_FormatMode = SelectFormatMode()
-    If g_FormatMode = "" Then
-        MsgBox "å·²å–æ¶ˆæ“ä½œ", vbInformation, "å–æ¶ˆ"
-        Exit Sub
-    End If
-
-    ' æ˜¾ç¤ºæ¨¡å¼åç§°
-    If g_FormatMode = "government" Then
-        modeName = "æ”¿åºœäº¤ä»˜ç‰ˆï¼ˆæ ‡é¢˜é¦–è¡Œç¼©è¿›ï¼‰"
-    Else
-        modeName = "GB/T 9704æ ‡å‡†ï¼ˆæ ‡é¢˜å·¦ç¼©è¿›ï¼‰"
-    End If
+Public Sub ReplaceAllSymbols()
+    Dim undoRec As Object
 
     Application.ScreenUpdating = False
 
+    On Error Resume Next
+    Set undoRec = Application.UndoRecord
+    If Not undoRec Is Nothing Then
+        undoRec.StartCustomRecord "È«²¿·ûºÅÌæ»»"
+    End If
+    On Error GoTo 0
+
     On Error GoTo ErrorHandler
 
-    Set undoRec = Application.UndoRecord
-    undoRec.StartCustomRecord "æ ¼å¼åŒ–å…¬æ–‡"
-
-    ' 1. é¡µé¢è®¾ç½®
-    Call SetupPage
-
-    ' 2. æ®µè½æ ¼å¼åŒ–
-    Call FormatAllParagraphs
-
-    ' 3. æ·»åŠ é¡µç 
-    Call AddPageNumber
-
-    ' 4. ç¬¦å·æ›¿æ¢
     Call DoReplace(",", ChrW(&HFF0C))
     Call DoReplace("(", ChrW(&HFF08))
     Call DoReplace(")", ChrW(&HFF09))
     Call DoReplace(":", ChrW(&HFF1A))
-
-    ' 5. æ™ºèƒ½å¼•å·æ›¿æ¢
+    Call NormalizeHeadingNumberDots
     Call ReplaceQuotesInternal
 
-    undoRec.EndCustomRecord
+    On Error Resume Next
+    If Not undoRec Is Nothing Then undoRec.EndCustomRecord
+    On Error GoTo 0
 
     Application.ScreenUpdating = True
-    MsgBox "å…¬æ–‡æ ¼å¼åŒ–å®Œæˆï¼" & vbCrLf & vbCrLf & _
-           "æ ¼å¼æ¨¡å¼ï¼š" & modeName & vbCrLf & vbCrLf & _
-           "å·²å®Œæˆä»¥ä¸‹æ“ä½œï¼š" & vbCrLf & _
-           "âˆš é¡µé¢è®¾ç½®ï¼ˆA4çº¸ã€æ ‡å‡†è¾¹è·ï¼‰" & vbCrLf & _
-           "âˆš æ®µè½æ ¼å¼åŒ–ï¼ˆå­—ä½“ã€è¡Œè·ã€ç¼©è¿›ï¼‰" & vbCrLf & _
-           "âˆš æ·»åŠ é¡µç ï¼ˆé¡µè„šå±…ä¸­ï¼‰" & vbCrLf & _
-           "âˆš ç¬¦å·æ›¿æ¢ï¼ˆé€—å·ã€æ‹¬å·ã€å†’å·ã€å¼•å·ï¼‰" & vbCrLf & vbCrLf & _
-           "æç¤ºï¼šæŒ‰ Ctrl+Z å¯æ’¤é”€æ‰€æœ‰æ›´æ”¹", vbInformation, "å…¬æ–‡æ ¼å¼åŒ–å·¥å…· v1.1"
+
+    MsgBox "È«²¿·ûºÅÌæ»»Íê³É£¡", vbInformation, "·ûºÅÌæ»»"
     Exit Sub
 
 ErrorHandler:
     On Error Resume Next
     If Not undoRec Is Nothing Then undoRec.EndCustomRecord
     Application.ScreenUpdating = True
-    MsgBox "å‘ç”Ÿé”™è¯¯ï¼š" & Err.Description, vbCritical, "é”™è¯¯"
-End Sub
-
-Public Sub FormatSelectedParagraphs()
-    Dim para As Paragraph
-    Dim undoRec As UndoRecord
-    
-    Application.ScreenUpdating = False
-    
-    On Error GoTo ErrorHandler
-    
-    Set undoRec = Application.UndoRecord
-    undoRec.StartCustomRecord "æ ¼å¼åŒ–é€‰ä¸­æ®µè½"
-    
-    For Each para In Selection.Paragraphs
-        Call FormatSingleParagraph(para)
-    Next para
-    
-    undoRec.EndCustomRecord
-    
-    Application.ScreenUpdating = True
-    MsgBox "é€‰ä¸­æ®µè½æ ¼å¼åŒ–å®Œæˆï¼" & vbCrLf & vbCrLf & _
-           "æç¤ºï¼šæŒ‰ Ctrl+Z å¯æ’¤é”€", vbInformation, "æ®µè½æ ¼å¼åŒ–"
-    Exit Sub
-    
-ErrorHandler:
-    On Error Resume Next
-    If Not undoRec Is Nothing Then undoRec.EndCustomRecord
-    Application.ScreenUpdating = True
-    MsgBox "å‘ç”Ÿé”™è¯¯ï¼š" & Err.Description, vbCritical, "é”™è¯¯"
+    MsgBox "·¢Éú´íÎó£º" & Err.Description, vbCritical, "´íÎó"
 End Sub
 
 '==============================================================================
-' é¡µé¢è®¾ç½®
+' ÕıÎÄ·ûºÅÌæ»»£¨°´±ê×¼¸å£ºÊı×Ö/±êµã/¿Õ¸ñ¹æ·¶»¯£©
+'==============================================================================
+
+Private Sub ReplaceBodySymbols()
+    Dim para As Paragraph
+    Dim rng As Range
+    Dim txt As String
+    Dim charCode As Long
+    Dim i As Long
+
+    Application.ScreenUpdating = False
+
+    For Each para In ActiveDocument.Paragraphs
+        On Error Resume Next
+        If para.Range.Information(12) Then GoTo NextPara ' Ìø¹ı±í¸ñ (12=wdWithInTable)
+        On Error GoTo 0
+
+        Set rng = para.Range
+        txt = para.Range.Text
+        If Len(Trim(txt)) <= 1 Then GoTo NextPara
+
+        ' Öğ×Ö·û´¦Àí£ºÎ÷ÎÄ/Êı×ÖÓÃ Times New Roman
+        For i = rng.Start To rng.End - 1
+            On Error Resume Next
+            Dim charRng As Range
+            Set charRng = ActiveDocument.Range(i, i + 1)
+            If Not charRng Is Nothing Then
+                charCode = AscW(charRng.Text)
+                If (charCode >= 32 And charCode <= 126) Or (charCode >= 48 And charCode <= 57) Then
+                    charRng.Font.NameAscii = "Times New Roman"
+                End If
+            End If
+            On Error GoTo 0
+        Next i
+
+NextPara:
+    Next para
+
+    Application.ScreenUpdating = True
+End Sub
+Private Sub NormalizeHeadingNumberDots()
+    Dim para As Paragraph
+    Dim rng As Range, dotRng As Range
+    Dim txt As String, ch As String, fullDot As String
+    Dim i As Long
+
+    On Error Resume Next
+    fullDot = ChrW(&HFF0E)
+
+    For Each para In ActiveDocument.Paragraphs
+        If para.Range.Information(12) Then GoTo NextPara
+
+        Set rng = para.Range
+        If rng.End <= rng.Start Then GoTo NextPara
+        rng.End = rng.End - 1
+        txt = rng.Text
+
+        For i = 1 To Len(txt) - 1
+            ch = Mid(txt, i, 1)
+            If ch <> " " And ch <> vbTab And ch <> ChrW(&H3000) Then
+                If IsNumeric(ch) And Mid(txt, i + 1, 1) = fullDot Then
+                    Set dotRng = ActiveDocument.Range(rng.Start + i, rng.Start + i + 1)
+                    dotRng.Text = "."
+                End If
+                Exit For
+            End If
+        Next i
+
+NextPara:
+    Next para
+End Sub
+'==============================================================================
+' Ö÷¸ñÊ½»¯¹¦ÄÜ (WPSÔöÇ¿°æ£º·âÃæ+Ä¿Â¼+·Ö½Ú+Ò³Âë)
+'==============================================================================
+
+Public Sub FormatGongwen()
+    Dim modeName As String
+
+    g_FormatMode = SelectFormatMode()
+    modeName = "Õş¸®½»¸¶°æ£¨°´±ê×¼¸å¶ÔÆë£©"
+
+    MsgBox "¿ªÊ¼¸ñÊ½»¯ÎÄµµ£¬ÇëÉÔºò...", vbInformation, "¹«ÎÄ¸ñÊ½»¯¹¤¾ß"
+
+    Application.ScreenUpdating = False
+
+    On Error GoTo ErrorHandler
+
+    ' 1. Ò³ÃæÉèÖÃ
+    Call SetupPage
+
+    ' 2. ÕıÎÄ·ûºÅ¹æ·¶»¯ + ·âÃæ/ÕıÎÄÍ³Ò»¸ñÊ½
+    Call ReplaceBodySymbols
+    Call DoReplace(",", ChrW(&HFF0C))
+    Call DoReplace("(", ChrW(&HFF08))
+    Call DoReplace(")", ChrW(&HFF09))
+    Call DoReplace(":", ChrW(&HFF1A))
+    Call NormalizeHeadingNumberDots
+    Call ReplaceQuotesInternal
+    Call FormatCoverAndBodyParagraphs
+
+    ' 3. ±í¸ñ¸ñÊ½
+    Call FormatAllTables(False)
+
+    ' 4. ·Ö½ÚÓëÒ³Âë
+    Call EnsureSectionLayout
+    Call SetupPage
+    Call DetectDocumentStructure
+    Call AddPageNumber
+
+    ' 5. ¸üĞÂÄ¿Â¼£¬ÔÙµ¥¶À¸ñÊ½»¯Ä¿Â¼
+    Call UpdateDocumentToc
+    Call DetectDocumentStructure
+    Call FormatTocParagraphs
+
+    Application.ScreenUpdating = True
+
+    MsgBox "¹«ÎÄ¸ñÊ½»¯Íê³É£¡" & vbCrLf & vbCrLf & _
+           "¸ñÊ½Ä£Ê½£º" & modeName & vbCrLf & vbCrLf & _
+           "ÒÑÍê³ÉÒÔÏÂ²Ù×÷£º" & vbCrLf & _
+           "¡Ì Ò³ÃæÉèÖÃ£¨A4Ö½¡¢±ê×¼±ß¾à£©" & vbCrLf & _
+           "¡Ì ÕıÎÄ/·âÃæÏÈĞĞ¶¨ĞÍ£¨±êÌâ¡¢ÕıÎÄ¡¢±êµã¡¢¿Õ¸ñ£©" & vbCrLf & _
+           "¡Ì ±í¸ñÑùÊ½Í¬²½±ê×¼¸å" & vbCrLf & _
+           "¡Ì ·Ö½ÚÓëÒ³Âë£¨·âÃæ/Ä¿Â¼/ÕıÎÄ£©" & vbCrLf & _
+           "¡Ì Ä¿Â¼¸üĞÂ²¢µ¥¶À¸ñÊ½»¯" & vbCrLf & vbCrLf & _
+           "ÌáÊ¾£º°´ Ctrl+Z ¿É³·ÏúËùÓĞ¸ü¸Ä", vbInformation, "¹«ÎÄ¸ñÊ½»¯¹¤¾ß v1.3 (WPS¼æÈİ°æ)"
+    Exit Sub
+
+ErrorHandler:
+    Application.ScreenUpdating = True
+    MsgBox "·¢Éú´íÎó£º" & Err.Description & vbCrLf & "´íÎó´úÂë£º" & Err.Number, vbCritical, "´íÎó"
+End Sub
+
+'==============================================================================
+' Ò³ÃæÉèÖÃ
 '==============================================================================
 
 Private Sub SetupPage()
-    With ActiveDocument.PageSetup
+    On Error Resume Next
+
+    Dim s As Long
+    If ActiveDocument.Sections.Count = 0 Then Exit Sub
+
+    For s = 1 To ActiveDocument.Sections.Count
+        Call ApplyPageSetupToSection(ActiveDocument.Sections(s))
+    Next s
+End Sub
+
+Private Sub ApplyPageSetupToSection(sec As Section)
+    On Error Resume Next
+    With sec.PageSetup
         .PageWidth = CentimetersToPoints(21)
         .PageHeight = CentimetersToPoints(29.7)
         .TopMargin = PAGE_MARGIN_TOP
@@ -379,105 +441,383 @@ Private Sub SetupPage()
         .RightMargin = PAGE_MARGIN_RIGHT
         .HeaderDistance = HEADER_DISTANCE
         .FooterDistance = FOOTER_DISTANCE
+        .DifferentFirstPageHeaderFooter = False
+        .OddAndEvenPagesHeaderFooter = False
+        .LayoutMode = 1
         .Gutter = 0
-        .GutterPos = wdGutterPosLeft
+        .GutterPos = 0
     End With
 End Sub
-
 '==============================================================================
-' æ®µè½æ ¼å¼åŒ–
+' ÎÄµµ½á¹¹¼ì²â£¨·âÃæ/Ä¿Â¼/ÕıÎÄ·Ö½ç£©
 '==============================================================================
 
-Private Sub FormatAllParagraphs()
-    Dim para As Paragraph
-    Dim i As Long, total As Long
-    
-    total = ActiveDocument.Paragraphs.Count
-    
-    For i = 1 To total
-        Set para = ActiveDocument.Paragraphs(i)
-        ' è·³è¿‡è¡¨æ ¼ä¸­çš„æ®µè½
-        If Not para.Range.Information(wdWithInTable) Then
-            Call FormatSingleParagraph(para)
-        End If
-        If i Mod 100 = 0 Then Application.StatusBar = "æ­£åœ¨æ ¼å¼åŒ–... " & i & "/" & total
-    Next i
-    
-    Application.StatusBar = ""
+Private Sub ResetDocumentMarkers()
+    g_CoverTitleEnd = 0
+    g_CoverOrgIndex = 0
+    g_CoverDateIndex = 0
+    g_TocTitleIndex = 0
+    g_TocEndIndex = 0
+    g_BodyStartIndex = 0
 End Sub
 
-Private Sub FormatSingleParagraph(para As Paragraph)
+Private Sub DetectDocumentStructure()
+    Dim i As Long, total As Long
+    Dim para As Paragraph
+    Dim txt As String
+
+    Call ResetDocumentMarkers
+
+    total = ActiveDocument.Paragraphs.Count
+    If total = 0 Then Exit Sub
+
+    ' É¨Ãè·âÃæ£ºÇ°30¶Î
+    Call DetectCoverLayout
+
+    ' É¨ÃèÄ¿Â¼±êÌâºÍÕıÎÄÆğµã
+    For i = 1 To total
+        Set para = ActiveDocument.Paragraphs(i)
+        On Error Resume Next
+        If para.Range.Information(12) Then GoTo NextStructPara
+        On Error GoTo 0
+
+        txt = GetCleanParaText(para)
+
+        ' Ê¶±ğÄ¿Â¼±êÌâ
+        If IsTocTitleText(txt) And g_TocTitleIndex = 0 Then
+            g_TocTitleIndex = i
+        End If
+
+        ' Ê¶±ğÕıÎÄÆğµã£¨ÕÂ±êÌâ¡¢½Ú±êÌâ»òµÚÒ»¸öÕıÎÄ²ã¼¶±êÌâ£©
+        If g_BodyStartIndex = 0 And i > g_CoverDateIndex Then
+            If g_TocTitleIndex > 0 And i > g_TocTitleIndex And IsTocEntryParagraph(para) Then GoTo NextStructPara
+            If IsBodyStartText(txt) Then
+                g_BodyStartIndex = i
+            End If
+        End If
+
+NextStructPara:
+    Next i
+
+    ' Ä¿Â¼½áÊø£ºÄ¿Â¼±êÌâºóµ½µÚÒ»¸öÕıÎÄ±êÌâÖ®¼ä
+    If g_TocTitleIndex > 0 And g_BodyStartIndex > 0 Then
+        g_TocEndIndex = g_BodyStartIndex - 1
+    End If
+End Sub
+
+Private Sub DetectCoverLayout()
+    Dim i As Long, total As Long
+    Dim para As Paragraph
     Dim txt As String, level As String
-    
+    Dim candidateIndexes(1 To 10) As Long
+    Dim candidateCount As Long, datePos As Long, orgPos As Long
+    Dim scanLimit As Long
+
+    g_CoverTitleEnd = 0
+    g_CoverOrgIndex = 0
+    g_CoverDateIndex = 0
+
+    total = ActiveDocument.Paragraphs.Count
+    scanLimit = total
+    If scanLimit > 30 Then scanLimit = 30
+
+    ' ÊÕ¼¯Ç°30¶ÎÖĞ·Ç±êÌâ¡¢·Ç±í¸ñ¡¢³¤¶È<=100µÄºòÑ¡¶Î
+    For i = 1 To scanLimit
+        Set para = ActiveDocument.Paragraphs(i)
+        On Error Resume Next
+        If para.Range.Information(12) Then GoTo ContinueCover
+        On Error GoTo 0
+
+        txt = GetCleanParaText(para)
+        If txt = "" Then GoTo ContinueCover
+
+        level = DetectLevel(txt)
+        If level <> "body" Then
+            If candidateCount > 0 Then Exit For
+            GoTo ContinueCover
+        End If
+        If Len(txt) > 100 Then
+            If candidateCount > 0 Then Exit For
+            GoTo ContinueCover
+        End If
+
+        candidateCount = candidateCount + 1
+        If candidateCount > 10 Then Exit For
+        candidateIndexes(candidateCount) = i
+ContinueCover:
+    Next i
+
+    If candidateCount < 3 Then Exit Sub
+
+    ' ´ÓºóÏòÇ°ÕÒÈÕÆÚ
+    For i = candidateCount To 1 Step -1
+        txt = GetCleanParaText(ActiveDocument.Paragraphs(candidateIndexes(i)))
+        If IsCoverDateText(txt) Then
+            datePos = i
+            Exit For
+        End If
+    Next i
+    If datePos = 0 Then datePos = candidateCount
+
+    ' ÔÚÈÕÆÚÇ°ÕÒ±àÖÆµ¥Î»
+    If datePos < 3 Then Exit Sub
+    For i = datePos - 1 To 2 Step -1
+        txt = GetCleanParaText(ActiveDocument.Paragraphs(candidateIndexes(i)))
+        If IsCoverOrgText(txt) Then
+            orgPos = i
+            Exit For
+        End If
+    Next i
+    If orgPos = 0 Then orgPos = datePos - 1
+    If orgPos < 2 Then Exit Sub
+
+    g_CoverDateIndex = candidateIndexes(datePos)
+    g_CoverOrgIndex = candidateIndexes(orgPos)
+    g_CoverTitleEnd = candidateIndexes(orgPos - 1)
+End Sub
+
+Private Function GetCleanParaText(para As Paragraph) As String
+    Dim txt As String
+    txt = para.Range.Text
+    txt = Replace(txt, vbCr, "")
+    txt = Replace(txt, vbLf, "")
+    txt = Replace(txt, ChrW(&H3000), " ")
+    GetCleanParaText = Trim(txt)
+End Function
+
+Private Function IsCoverDateText(txt As String) As Boolean
+    Dim normalized As String
+    normalized = Replace(Replace(Replace(txt, " ", ""), vbTab, ""), ChrW(&H3000), "")
+
+    If InStr(normalized, ChrW(&H5E74)) > 0 And InStr(normalized, ChrW(&H6708)) > 0 Then
+        IsCoverDateText = True: Exit Function
+    End If
+
+    If normalized Like "####-#" Or normalized Like "####-##" Or _
+       normalized Like "####/#" Or normalized Like "####/##" Or _
+       normalized Like "####.#" Or normalized Like "####.##" Or _
+       normalized Like "####-#-#" Or normalized Like "####-##-##" Or _
+       normalized Like "####/#/#" Or normalized Like "####/##/##" Or _
+       normalized Like "####.#.#" Or normalized Like "####.##.##" Then
+        IsCoverDateText = True: Exit Function
+    End If
+
+    IsCoverDateText = False
+End Function
+
+Private Function IsCoverOrgText(txt As String) As Boolean
+    If txt = "" Then Exit Function
+
+    If InStr(txt, "¹«Ë¾") > 0 Or InStr(txt, "×ÉÑ¯") > 0 Or _
+       InStr(txt, "ÑĞ¾¿Ôº") > 0 Or InStr(txt, "ÑĞ¾¿Ëù") > 0 Or _
+       InStr(txt, "ÖĞĞÄ") > 0 Or InStr(txt, "°ì¹«ÊÒ") > 0 Or _
+       InStr(txt, "Î¯Ô±»á") > 0 Or InStr(txt, "Õş¸®") > 0 Or _
+       InStr(txt, "Ìü") > 0 Or InStr(txt, "¾Ö") > 0 Or _
+       InStr(txt, "¼¯ÍÅ") > 0 Or InStr(txt, "´óÑ§") > 0 Or _
+       InStr(txt, "Ñ§Ôº") > 0 Then
+        IsCoverOrgText = True: Exit Function
+    End If
+
+    IsCoverOrgText = False
+End Function
+
+Private Function IsTocTitleText(ByVal txt As String) As Boolean
+    Dim normalized As String
+    normalized = Replace(Replace(Replace(txt, " ", ""), vbTab, ""), ChrW(&H3000), "")
+    IsTocTitleText = (normalized = ChrW(&H76EE) & ChrW(&H5F55)) ' Ä¿Â¼
+End Function
+
+Private Function IsChineseTopHeadingText(ByVal txt As String) As Boolean
+    Dim cnNumbers As String, dunHao As String
+    cnNumbers = ChrW(&H4E00) & ChrW(&H4E8C) & ChrW(&H4E09) & ChrW(&H56DB) & _
+                ChrW(&H4E94) & ChrW(&H516D) & ChrW(&H4E03) & ChrW(&H516B) & _
+                ChrW(&H4E5D) & ChrW(&H5341)
+    dunHao = ChrW(&H3001)
+    IsChineseTopHeadingText = (InStr(cnNumbers, Left(txt, 1)) > 0 And InStr(txt, dunHao) > 0 And InStr(txt, dunHao) <= 3)
+End Function
+
+Private Function IsBodyStartText(ByVal txt As String) As Boolean
+    Dim normalized As String
+    normalized = Replace(Replace(Replace(txt, " ", ""), vbTab, ""), ChrW(&H3000), "")
+    IsBodyStartText = IsChineseTopHeadingText(normalized)
+End Function
+Private Function IsTocEntryParagraph(para As Paragraph) As Boolean
+    On Error Resume Next
+    Dim styleName As String
+    styleName = LCase(CStr(para.Style))
+
+    If InStr(styleName, "toc") > 0 Or InStr(styleName, ChrW(&H76EE) & ChrW(&H5F55)) > 0 Then
+        IsTocEntryParagraph = True
+        Exit Function
+    End If
+
+    If InStr(para.Range.Text, vbTab) > 0 Then
+        IsTocEntryParagraph = True
+        Exit Function
+    End If
+
+    IsTocEntryParagraph = False
+End Function
+
+'==============================================================================
+' ·âÃæ/ÕıÎÄ¶ÎÂä¸ñÊ½»¯
+'==============================================================================
+
+Private Sub FormatCoverAndBodyParagraphs()
+    Dim para As Paragraph
+    Dim i As Long, total As Long
+    Dim pct As Single, barLen As Integer, j As Integer
+    Dim barText As String, prevPct As Integer
+
+    Call DetectDocumentStructure
+
+    total = ActiveDocument.Paragraphs.Count
+    prevPct = -1
+
+    For i = 1 To total
+        Set para = ActiveDocument.Paragraphs(i)
+        On Error Resume Next
+        If para.Range.Information(12) Then GoTo NextFmtPara ' Ìø¹ı±í¸ñ
+        On Error GoTo 0
+
+        Call FormatSingleParagraph(para, i)
+
+        ' Ã¿1%¸üĞÂ½ø¶ÈÌõ
+        pct = i / total * 100
+        If Int(pct) <> prevPct Then
+            prevPct = Int(pct)
+            barLen = Int(pct / 5)
+            barText = "["
+            For j = 1 To 20
+                If j <= barLen Then
+                    barText = barText & ChrW(&H2588)
+                Else
+                    barText = barText & ChrW(&H2591)
+                End If
+            Next j
+            barText = barText & "] " & Int(pct) & "%"
+            Application.StatusBar = barText & "  " & i & "/" & total
+            DoEvents
+        End If
+
+NextFmtPara:
+    Next i
+
+    Application.StatusBar = "¸ñÊ½»¯Íê³É"
+End Sub
+
+'==============================================================================
+' µ¥¸ö¶ÎÂä¸ñÊ½»¯
+'==============================================================================
+
+Private Sub FormatSingleParagraph(para As Paragraph, Optional ByVal paraIndex As Long = 0)
+    Dim txt As String, level As String
+
+    On Error Resume Next
     txt = Trim(para.Range.Text)
     If Len(txt) <= 1 Then Exit Sub
-    
+    On Error GoTo 0
+
     level = DetectLevel(txt)
-    
+
+    ' ·âÃæ¶ÎÂäÓÅÏÈ´¦Àí
+    If paraIndex > 0 Then
+        If g_CoverTitleEnd > 0 And paraIndex <= g_CoverTitleEnd Then
+            Call ApplyCoverTitleStyle(para): Exit Sub
+        End If
+        If paraIndex = g_CoverOrgIndex Then
+            Call ApplyCoverOrgStyle(para): Exit Sub
+        End If
+        If paraIndex = g_CoverDateIndex Then
+            Call ApplyCoverDateStyle(para): Exit Sub
+        End If
+    End If
+
     Select Case level
         Case "level1": Call ApplyLevel1Style(para)
+        Case "level1b": Call ApplyLevel1bStyle(para)
         Case "level2": Call ApplyLevel2Style(para)
         Case "level3": Call ApplyLevel3Style(para)
         Case "level4": Call ApplyLevel4Style(para)
         Case "level5": Call ApplyLevel5Style(para)
         Case "level6": Call ApplyLevel6Style(para)
+        Case "cover_title": Call ApplyCoverTitleStyle(para)
+        Case "cover_org": Call ApplyCoverOrgStyle(para)
+        Case "cover_date": Call ApplyCoverDateStyle(para)
         Case "table_title": Call ApplyTableTitleStyle(para)
         Case "figure_title": Call ApplyFigureTitleStyle(para)
+        Case "note": Call ApplyNoteStyle(para)
+        Case "toc_title": Call ApplyTocTitleStyle(para)
+        Case "toc_entry": Call ApplyTocEntryStyle(para)
         Case Else: Call ApplyBodyStyle(para)
     End Select
-    
+
     Call FormatMixedText(para)
 End Sub
 
+'==============================================================================
+' ±êÌâ¼¶±ğ¼ì²â
+'==============================================================================
+
 Private Function DetectLevel(txt As String) As String
     Dim firstChar As String, secondChar As String
-    Dim cnNumbers As String, dunHao As String, fullDot As String, lBracket As String
-    
-    ' ä¸­æ–‡æ•°å­—ï¼šä¸€äºŒä¸‰å››äº”å…­ä¸ƒå…«ä¹å
+    Dim cnNumbers As String, dunHao As String, lBracket As String
+    Dim normalized As String
+
     cnNumbers = ChrW(&H4E00) & ChrW(&H4E8C) & ChrW(&H4E09) & ChrW(&H56DB) & _
                 ChrW(&H4E94) & ChrW(&H516D) & ChrW(&H4E03) & ChrW(&H516B) & _
                 ChrW(&H4E5D) & ChrW(&H5341)
-    dunHao = ChrW(&H3001)      ' é¡¿å·
-    fullDot = ChrW(&HFF0E)     ' å…¨è§’ç‚¹
-    lBracket = ChrW(&HFF08)    ' å…¨è§’å·¦æ‹¬å·
-    
+    dunHao = ChrW(&H3001)      ' ¶ÙºÅ
+    lBracket = ChrW(&HFF08)    ' È«½Ç×óÀ¨ºÅ
+
     txt = Replace(Replace(txt, vbCr, ""), vbLf, "")
-    If Len(txt) = 0 Then DetectLevel = "body": Exit Function
-    
-    firstChar = Left(txt, 1)
-    If Len(txt) > 1 Then secondChar = Mid(txt, 2, 1) Else secondChar = ""
-    
-    ' è¡¨æ ¼æ ‡é¢˜ï¼šä»¥"è¡¨"å¼€å¤´
+    normalized = Replace(Replace(Replace(txt, " ", ""), vbTab, ""), ChrW(&H3000), "")
+    If Len(normalized) = 0 Then DetectLevel = "body": Exit Function
+
+    firstChar = Left(normalized, 1)
+    If Len(normalized) > 1 Then secondChar = Mid(normalized, 2, 1) Else secondChar = ""
+
+    ' ±í¸ñ±êÌâ
     If firstChar = ChrW(&H8868) Then DetectLevel = "table_title": Exit Function
-    ' å›¾ç‰‡æ ‡é¢˜ï¼šä»¥"å›¾"å¼€å¤´
+    ' Í¼Æ¬±êÌâ
     If firstChar = ChrW(&H56FE) Then DetectLevel = "figure_title": Exit Function
-    
-    ' äºŒçº§æ ‡é¢˜ï¼šä¸€ã€äºŒã€ä¸‰... + é¡¿å·
-    If InStr(cnNumbers, firstChar) > 0 And InStr(txt, dunHao) > 0 And InStr(txt, dunHao) <= 3 Then
+    ' Êı¾İÀ´Ô´/×¢ÊÍ
+    If IsNoteText(normalized) Then DetectLevel = "note": Exit Function
+    ' Ä¿Â¼±êÌâ
+    If IsTocTitleText(normalized) Then DetectLevel = "toc_title": Exit Function
+
+    ' Ò»¼¶±êÌâ£ºÒ»¡¢¶ş¡¢Èı... + ¶ÙºÅ
+    If IsChineseTopHeadingText(normalized) Then
+        DetectLevel = "level1": Exit Function
+    End If
+
+    ' ¶ş¼¶±êÌâ£º£¨Ò»£©£¨¶ş£©... È«½Ç/°ë½ÇÀ¨ºÅ + ÖĞÎÄÊı×Ö
+    If (firstChar = lBracket Or firstChar = "(") And InStr(cnNumbers, secondChar) > 0 Then
         DetectLevel = "level2": Exit Function
     End If
-    
-    ' ä¸‰çº§æ ‡é¢˜ï¼šï¼ˆä¸€ï¼‰ï¼ˆäºŒï¼‰... å…¨è§’æ‹¬å· + ä¸­æ–‡æ•°å­—
-    If (firstChar = lBracket Or firstChar = "(") And InStr(cnNumbers, secondChar) > 0 Then
+
+    ' Èı¼¶±êÌâ£º1. 2. 3. ... Êı×Ö + °ë½Çµã
+    If IsNumeric(firstChar) And secondChar = "." Then
         DetectLevel = "level3": Exit Function
     End If
-    
-    ' å››çº§æ ‡é¢˜ï¼š1. 2. 3.... æ•°å­— + å…¨è§’ç‚¹
-    If IsNumeric(firstChar) And InStr(txt, fullDot) > 0 And InStr(txt, fullDot) <= 3 Then
+
+    ' ËÄ¼¶±êÌâ£º£¨1£©/(1) ... À¨ºÅ + °¢À­²®Êı×Ö
+    If (firstChar = lBracket Or firstChar = "(") And IsNumeric(secondChar) Then
         DetectLevel = "level4": Exit Function
     End If
-    
-    ' äº”çº§æ ‡é¢˜ï¼š(1) (2)... æ‹¬å· + é˜¿æ‹‰ä¼¯æ•°å­—
-    If (firstChar = lBracket Or firstChar = "(") And IsNumeric(secondChar) Then
-        DetectLevel = "level5": Exit Function
-    End If
-    
-    ' å…­çº§æ ‡é¢˜ï¼šå¸¦åœˆæ•°å­—
-    If IsCircledNumber(firstChar) Then DetectLevel = "level6": Exit Function
-    
+
+    ' Îå¼¶±êÌâ£º´øÈ¦Êı×Ö
+    If IsCircledNumber(firstChar) Then DetectLevel = "level5": Exit Function
+
     DetectLevel = "body"
 End Function
 
+Private Function IsNoteText(ByVal txt As String) As Boolean
+    IsNoteText = (Left(txt, 5) = ChrW(&H6570) & ChrW(&H636E) & ChrW(&H6765) & ChrW(&H6E90) & ChrW(&HFF1A)) Or _
+                 (Left(txt, 3) = ChrW(&H6765) & ChrW(&H6E90) & ChrW(&HFF1A)) Or _
+                 (Left(txt, 2) = ChrW(&H6CE8) & ChrW(&HFF1A)) Or _
+                 (Left(txt, 3) = ChrW(&H8BF4) & ChrW(&H660E) & ChrW(&HFF1A))
+End Function
 Private Function IsCircledNumber(char As String) As Boolean
     Dim code As Long
     If Len(char) = 0 Then IsCircledNumber = False: Exit Function
@@ -486,245 +826,368 @@ Private Function IsCircledNumber(char As String) As Boolean
 End Function
 
 '==============================================================================
-' æ ·å¼åº”ç”¨å‡½æ•°
+' ÑùÊ½Ó¦ÓÃº¯Êı
 '==============================================================================
 
+Private Function StandardFirstLineIndent() As Single
+    StandardFirstLineIndent = 32
+End Function
+
+Private Sub ApplyBuiltInHeadingLevel(para As Paragraph, ByVal styleId As Long, ByVal outlineLevel As Long)
+    On Error Resume Next
+    para.Range.Style = styleId
+    para.Format.OutlineLevel = outlineLevel
+End Sub
+
+Private Sub ApplyBodyOutlineLevel(para As Paragraph)
+    On Error Resume Next
+    para.Range.Style = STYLE_NORMAL
+    para.Format.OutlineLevel = OUTLINE_LEVEL_BODY
+End Sub
+Private Sub ApplyAutoLineSpacing(fmt As ParagraphFormat, Optional ByVal lineSpacing As Single = LINE_SPACING_18)
+    On Error Resume Next
+    fmt.LineSpacingRule = LINE_RULE_MULTIPLE
+    fmt.LineSpacing = lineSpacing
+End Sub
+
+Private Sub ApplyStandardParagraphFormat(para As Paragraph, ByVal alignment As Long, ByVal firstIndent As Single, Optional ByVal lineSpacing As Single = LINE_SPACING_18)
+    On Error Resume Next
+    With para.Format
+        .Alignment = alignment
+        Call ApplyAutoLineSpacing(para.Format, lineSpacing)
+        .SpaceBefore = 0: .SpaceAfter = 0
+        .FirstLineIndent = firstIndent: .LeftIndent = 0: .RightIndent = 0
+    End With
+End Sub
+
 Private Sub ApplyLevel1Style(para As Paragraph)
+    On Error Resume Next
+    Call ApplyBuiltInHeadingLevel(para, STYLE_HEADING_2, OUTLINE_LEVEL_2)
     With para.Range.Font
-        .NameFarEast = GetFont("æ–¹æ­£å°æ ‡å®‹ç®€ä½“", "åæ–‡ä¸­å®‹", "å®‹ä½“")
+        .NameFarEast = GetFont("ºÚÌå", "Î¢ÈíÑÅºÚ", "ËÎÌå")
         .NameAscii = "Times New Roman"
-        .NameOther = "Times New Roman"
+        .Size = FONT_SIZE_SAN
+        .Bold = False
+        .Color = FONT_COLOR_BLACK
+    End With
+    Call ApplyStandardParagraphFormat(para, 3, StandardFirstLineIndent())
+End Sub
+
+Private Sub ApplyLevel1bStyle(para As Paragraph)
+    ' ¾É°æ¡°µÚÒ»½Ú¡±Èë¿Ú±£ÁôÎª¼æÈİÏî£»ĞÂ±ê×¼²»ÔÙÖ÷¶¯Ê¶±ğÕÂ/½Ú²ã¼¶¡£
+    Call ApplyLevel1Style(para)
+End Sub
+
+Private Sub ApplyCoverTitleStyle(para As Paragraph)
+    On Error Resume Next
+    Call ApplyBodyOutlineLevel(para)
+    With para.Range.Font
+        .NameFarEast = GetFont("·½ÕıĞ¡±êËÎ¼òÌå", "»ªÎÄÖĞËÎ", "ËÎÌå")
+        .NameAscii = "Times New Roman"
         .Size = FONT_SIZE_ER
         .Bold = False
+        .Color = FONT_COLOR_BLACK
+    End With
+    Call ApplyStandardParagraphFormat(para, 1, 0, LINE_SPACING_24)
+End Sub
+
+Private Sub ApplyCoverOrgStyle(para As Paragraph)
+    On Error Resume Next
+    Call ApplyBodyOutlineLevel(para)
+    With para.Range.Font
+        .NameFarEast = GetFont("¿¬Ìå_GB2312", "¿¬Ìå", "»ªÎÄ¿¬Ìå")
+        .NameAscii = "Times New Roman"
+        .Size = FONT_SIZE_SAN
+        .Bold = False
+        .Color = FONT_COLOR_BLACK
     End With
     With para.Format
-        .Alignment = wdAlignParagraphCenter
-        .LineSpacingRule = wdLineSpaceExactly
-        .LineSpacing = LINE_SPACING_30
-        .SpaceBefore = 8
-        .SpaceAfter = 8
-        .FirstLineIndent = 0
-        .LeftIndent = 0
+        .Alignment = 1: .LineSpacingRule = LINE_RULE_EXACTLY: .LineSpacing = LINE_SPACING_35
+        .SpaceBefore = 0: .SpaceAfter = 0
+        .FirstLineIndent = 0: .LeftIndent = 0: .RightIndent = 0
     End With
+End Sub
+
+Private Sub ApplyCoverDateStyle(para As Paragraph)
+    Call ApplyCoverOrgStyle(para)
 End Sub
 
 Private Sub ApplyLevel2Style(para As Paragraph)
-    Dim indentValue As Single
-    indentValue = CentimetersToPoints(0.85) * 2  ' 2å­—ç¬¦
-
+    On Error Resume Next
+    Call ApplyBuiltInHeadingLevel(para, STYLE_HEADING_3, OUTLINE_LEVEL_3)
     With para.Range.Font
-        .NameFarEast = GetFont("é»‘ä½“", "å¾®è½¯é›…é»‘", "å®‹ä½“")
+        .NameFarEast = GetFont("¿¬Ìå_GB2312", "¿¬Ìå", "»ªÎÄ¿¬Ìå")
         .NameAscii = "Times New Roman"
-        .NameOther = "Times New Roman"
         .Size = FONT_SIZE_SAN
         .Bold = False
+        .Color = FONT_COLOR_BLACK
     End With
-    With para.Format
-        .Alignment = wdAlignParagraphLeft
-        .LineSpacingRule = wdLineSpaceExactly
-        .LineSpacing = LINE_SPACING_30
-        .SpaceBefore = 8
-        .SpaceAfter = 8
-        ' æ ¹æ®æ ¼å¼æ¨¡å¼è®¾ç½®ç¼©è¿›
-        If g_FormatMode = "government" Then
-            ' æ”¿åºœäº¤ä»˜ç‰ˆï¼šé¦–è¡Œç¼©è¿›
-            .FirstLineIndent = indentValue
-            .LeftIndent = 0
-        Else
-            ' GB/T 9704æ ‡å‡†ï¼šå·¦ç¼©è¿›
-            .FirstLineIndent = 0
-            .LeftIndent = indentValue
-        End If
-    End With
+    Call ApplyStandardParagraphFormat(para, 3, StandardFirstLineIndent())
 End Sub
 
 Private Sub ApplyLevel3Style(para As Paragraph)
-    Dim indentValue As Single
-    indentValue = CentimetersToPoints(0.85) * 2  ' 2å­—ç¬¦
-
+    On Error Resume Next
+    Call ApplyBodyOutlineLevel(para)
     With para.Range.Font
-        .NameFarEast = GetFont("æ¥·ä½“_GB2312", "æ¥·ä½“", "åæ–‡æ¥·ä½“")
+        .NameFarEast = GetFont("·ÂËÎ_GB2312", "·ÂËÎ", "»ªÎÄ·ÂËÎ")
         .NameAscii = "Times New Roman"
-        .NameOther = "Times New Roman"
         .Size = FONT_SIZE_SAN
         .Bold = False
+        .Color = FONT_COLOR_BLACK
     End With
-    With para.Format
-        .Alignment = wdAlignParagraphLeft
-        .LineSpacingRule = wdLineSpaceExactly
-        .LineSpacing = LINE_SPACING_30
-        .SpaceBefore = 8
-        .SpaceAfter = 8
-        ' æ ¹æ®æ ¼å¼æ¨¡å¼è®¾ç½®ç¼©è¿›
-        If g_FormatMode = "government" Then
-            ' æ”¿åºœäº¤ä»˜ç‰ˆï¼šé¦–è¡Œç¼©è¿›
-            .FirstLineIndent = indentValue
-            .LeftIndent = 0
-        Else
-            ' GB/T 9704æ ‡å‡†ï¼šå·¦ç¼©è¿›
-            .FirstLineIndent = 0
-            .LeftIndent = indentValue
-        End If
-    End With
+    Call ApplyStandardParagraphFormat(para, 3, StandardFirstLineIndent())
 End Sub
 
 Private Sub ApplyLevel4Style(para As Paragraph)
-    Dim indentValue As Single
-    indentValue = CentimetersToPoints(0.85) * 2  ' 2å­—ç¬¦
-
-    With para.Range.Font
-        .NameFarEast = GetFont("ä»¿å®‹_GB2312", "ä»¿å®‹", "åæ–‡ä»¿å®‹")
-        .NameAscii = "Times New Roman"
-        .NameOther = "Times New Roman"
-        .Size = FONT_SIZE_SAN
-        .Bold = False
-    End With
-    With para.Format
-        .Alignment = wdAlignParagraphLeft
-        .LineSpacingRule = wdLineSpaceExactly
-        .LineSpacing = LINE_SPACING_28
-        .SpaceBefore = 8
-        .SpaceAfter = 8
-        ' æ ¹æ®æ ¼å¼æ¨¡å¼è®¾ç½®ç¼©è¿›
-        If g_FormatMode = "government" Then
-            ' æ”¿åºœäº¤ä»˜ç‰ˆï¼šé¦–è¡Œç¼©è¿›
-            .FirstLineIndent = indentValue
-            .LeftIndent = 0
-        Else
-            ' GB/T 9704æ ‡å‡†ï¼šå·¦ç¼©è¿›
-            .FirstLineIndent = 0
-            .LeftIndent = indentValue
-        End If
-    End With
+    Call ApplyBodyStyle(para)
 End Sub
 
 Private Sub ApplyLevel5Style(para As Paragraph)
-    Dim indentValue As Single
-    indentValue = CentimetersToPoints(0.85) * 2  ' 2å­—ç¬¦
-
-    With para.Range.Font
-        .NameFarEast = GetFont("ä»¿å®‹_GB2312", "ä»¿å®‹", "åæ–‡ä»¿å®‹")
-        .NameAscii = "Times New Roman"
-        .NameOther = "Times New Roman"
-        .Size = FONT_SIZE_SAN
-        .Bold = False
-    End With
-    With para.Format
-        .Alignment = wdAlignParagraphLeft
-        .LineSpacingRule = wdLineSpaceExactly
-        .LineSpacing = LINE_SPACING_28
-        .SpaceBefore = 8
-        .SpaceAfter = 8
-        ' æ ¹æ®æ ¼å¼æ¨¡å¼è®¾ç½®ç¼©è¿›
-        If g_FormatMode = "government" Then
-            ' æ”¿åºœäº¤ä»˜ç‰ˆï¼šé¦–è¡Œç¼©è¿›
-            .FirstLineIndent = indentValue
-            .LeftIndent = 0
-        Else
-            ' GB/T 9704æ ‡å‡†ï¼šå·¦ç¼©è¿›
-            .FirstLineIndent = 0
-            .LeftIndent = indentValue
-        End If
-    End With
+    Call ApplyBodyStyle(para)
 End Sub
 
 Private Sub ApplyLevel6Style(para As Paragraph)
-    With para.Range.Font
-        .NameFarEast = GetFont("ä»¿å®‹_GB2312", "ä»¿å®‹", "åæ–‡ä»¿å®‹")
-        .NameAscii = "Times New Roman"
-        .NameOther = "Times New Roman"
-        .Size = FONT_SIZE_SAN
-        .Bold = False
-    End With
-    With para.Format
-        .Alignment = wdAlignParagraphJustify
-        .LineSpacingRule = wdLineSpaceExactly
-        .LineSpacing = LINE_SPACING_28
-        .SpaceBefore = 0
-        .SpaceAfter = 0
-        .FirstLineIndent = CentimetersToPoints(0.85) * 2
-        .LeftIndent = 0
-    End With
+    Call ApplyBodyStyle(para)
 End Sub
 
 Private Sub ApplyBodyStyle(para As Paragraph)
+    On Error Resume Next
+    Call ApplyBodyOutlineLevel(para)
     With para.Range.Font
-        .NameFarEast = GetFont("ä»¿å®‹_GB2312", "ä»¿å®‹", "åæ–‡ä»¿å®‹")
+        .NameFarEast = GetFont("·ÂËÎ_GB2312", "·ÂËÎ", "»ªÎÄ·ÂËÎ")
         .NameAscii = "Times New Roman"
-        .NameOther = "Times New Roman"
         .Size = FONT_SIZE_SAN
         .Bold = False
+        .Color = FONT_COLOR_BLACK
     End With
-    With para.Format
-        .Alignment = wdAlignParagraphJustify
-        .LineSpacingRule = wdLineSpaceExactly
-        .LineSpacing = LINE_SPACING_28
-        .SpaceBefore = 0
-        .SpaceAfter = 0
-        .FirstLineIndent = CentimetersToPoints(0.85) * 2
-        .LeftIndent = 0
-    End With
+    Call ApplyStandardParagraphFormat(para, 3, StandardFirstLineIndent())
 End Sub
 
 Private Sub ApplyTableTitleStyle(para As Paragraph)
+    On Error Resume Next
+    Call ApplyBodyOutlineLevel(para)
     With para.Range.Font
-        .NameFarEast = GetFont("é»‘ä½“", "å¾®è½¯é›…é»‘", "å®‹ä½“")
+        .NameFarEast = GetFont("ºÚÌå", "Î¢ÈíÑÅºÚ", "ËÎÌå")
         .NameAscii = "Times New Roman"
-        .NameOther = "Times New Roman"
         .Size = FONT_SIZE_XIAOSI
         .Bold = False
+        .Color = FONT_COLOR_BLACK
     End With
-    With para.Format
-        .Alignment = wdAlignParagraphCenter
-        .LineSpacingRule = wdLineSpaceSingle
-        .SpaceBefore = 8
-        .SpaceAfter = 8
-        .FirstLineIndent = 0
-        .LeftIndent = 0
-    End With
+    Call ApplyStandardParagraphFormat(para, 1, 0)
 End Sub
 
 Private Sub ApplyFigureTitleStyle(para As Paragraph)
+    Call ApplyTableTitleStyle(para)
+End Sub
+
+Private Sub ApplyNoteStyle(para As Paragraph)
+    On Error Resume Next
+    Call ApplyBodyOutlineLevel(para)
     With para.Range.Font
-        .NameFarEast = GetFont("é»‘ä½“", "å¾®è½¯é›…é»‘", "å®‹ä½“")
+        .NameFarEast = GetFont("·ÂËÎ_GB2312", "·ÂËÎ", "»ªÎÄ·ÂËÎ")
         .NameAscii = "Times New Roman"
-        .NameOther = "Times New Roman"
-        .Size = FONT_SIZE_XIAOSI
+        .Size = FONT_SIZE_WU
         .Bold = False
+        .Color = FONT_COLOR_BLACK
+    End With
+    Call ApplyStandardParagraphFormat(para, 3, StandardFirstLineIndent())
+End Sub
+
+Private Sub EnsureRightDotTab(fmt As ParagraphFormat, ByVal position As Single)
+    On Error Resume Next
+    fmt.TabStops.ClearAll
+    fmt.TabStops.Add Position:=position, Alignment:=2, Leader:=1
+End Sub
+
+Private Sub ApplyTocTitleStyle(para As Paragraph)
+    On Error Resume Next
+    Call ApplyBodyOutlineLevel(para)
+    With para.Range.Font
+        .NameFarEast = GetFont("ºÚÌå", "Î¢ÈíÑÅºÚ", "ËÎÌå")
+        .NameAscii = "Times New Roman"
+        .Size = 18
+        .Bold = True
+        .Color = FONT_COLOR_BLACK
     End With
     With para.Format
-        .Alignment = wdAlignParagraphCenter
-        .LineSpacingRule = wdLineSpaceSingle
-        .SpaceBefore = 0
-        .SpaceAfter = 0
-        .FirstLineIndent = 0
-        .LeftIndent = 0
+        .Alignment = 1
+        Call ApplyAutoLineSpacing(para.Format, LINE_SPACING_18)
+        .SpaceBefore = 0: .SpaceAfter = 0
+        .FirstLineIndent = 0: .LeftIndent = 0: .RightIndent = 0
+        Call EnsureRightDotTab(para.Format, 415)
     End With
 End Sub
 
+Private Sub ApplyTocEntryStyle(para As Paragraph, Optional ByVal tocText As String = "")
+    Dim normalized As String
+    Dim isSecondLevel As Boolean
+
+    On Error Resume Next
+    If tocText = "" Then tocText = GetCleanParaText(para)
+    normalized = Replace(Replace(Replace(tocText, " ", ""), vbTab, ""), ChrW(&H3000), "")
+    isSecondLevel = (Left(normalized, 1) = ChrW(&HFF08) Or Left(normalized, 1) = "(")
+
+    With para.Range.Font
+        If isSecondLevel Then
+            .NameFarEast = GetFont("¿¬Ìå", "¿¬Ìå_GB2312", "»ªÎÄ¿¬Ìå")
+        Else
+            .NameFarEast = GetFont("ºÚÌå", "Î¢ÈíÑÅºÚ", "ËÎÌå")
+        End If
+        .NameAscii = "Times New Roman"
+        .Size = FONT_SIZE_SI
+        .Bold = False
+        .Color = FONT_COLOR_BLACK
+    End With
+
+    With para.Format
+        .Alignment = 3
+        Call ApplyAutoLineSpacing(para.Format, LINE_SPACING_18)
+        .SpaceBefore = 0: .SpaceAfter = 0
+        .FirstLineIndent = StandardFirstLineIndent()
+        If isSecondLevel Then
+            .LeftIndent = StandardFirstLineIndent()
+        Else
+            .LeftIndent = 0
+        End If
+        .RightIndent = 0
+        Call EnsureRightDotTab(para.Format, 442.2)
+    End With
+End Sub
+
+Private Sub FormatTocParagraphs()
+    Dim i As Long
+    Dim para As Paragraph
+
+    If g_TocTitleIndex = 0 Or g_TocEndIndex = 0 Then Exit Sub
+
+    For i = g_TocTitleIndex To g_TocEndIndex
+        If i > ActiveDocument.Paragraphs.Count Then Exit For
+        Set para = ActiveDocument.Paragraphs(i)
+        On Error Resume Next
+        If para.Range.Information(12) Then GoTo NextTocPara
+        On Error GoTo 0
+
+        Dim txt As String
+        txt = GetCleanParaText(para)
+
+        If IsTocTitleText(txt) Then
+            Call ApplyTocTitleStyle(para)
+        Else
+            Call ApplyTocEntryStyle(para, txt)
+        End If
+
+NextTocPara:
+    Next i
+End Sub
+
 '==============================================================================
-' æ··åˆæ–‡æœ¬æ ¼å¼åŒ–
+' ¸üĞÂÄ¿Â¼
+'==============================================================================
+
+Private Sub UpdateDocumentToc()
+    On Error Resume Next
+    Dim fld As Field
+    For Each fld In ActiveDocument.Fields
+        If fld.Type = 13 Then ' wdFieldTOC
+            fld.Update
+        End If
+    Next fld
+End Sub
+
+'==============================================================================
+' ·Ö½Ú²¼¾Ö£¨·âÃæ/Ä¿Â¼/ÕıÎÄ·Ö½Ú£©
+'==============================================================================
+
+Private Sub EnsureSectionLayout()
+    On Error Resume Next
+
+    Dim coverEndPara As Long
+    Dim tocStartPara As Long
+    Dim bodyStartPara As Long
+    Dim totalParas As Long
+    Dim breakRng As Range
+
+    totalParas = ActiveDocument.Paragraphs.Count
+    If totalParas < 3 Then Exit Sub
+
+    ' È·¶¨·âÃæ½áÊøÎ»ÖÃ
+    If g_CoverDateIndex > 0 Then
+        coverEndPara = g_CoverDateIndex
+    Else
+        coverEndPara = 1
+    End If
+
+    ' È·¶¨Ä¿Â¼Æğµã
+    If g_TocTitleIndex > 0 Then
+        tocStartPara = g_TocTitleIndex
+    Else
+        tocStartPara = coverEndPara + 1
+    End If
+    If tocStartPara < 2 Then tocStartPara = 2
+    If tocStartPara > totalParas Then tocStartPara = totalParas
+
+    ' È·¶¨ÕıÎÄÆğµã
+    If g_BodyStartIndex > 0 Then
+        bodyStartPara = g_BodyStartIndex
+    ElseIf g_TocEndIndex > 0 Then
+        bodyStartPara = g_TocEndIndex + 1
+    Else
+        bodyStartPara = tocStartPara + 1
+    End If
+    If bodyStartPara <= tocStartPara Then bodyStartPara = tocStartPara + 1
+    If bodyStartPara > totalParas Then bodyStartPara = totalParas
+
+    ' Çå³ıÒÑÓĞµÄ·Ö½Ú·û£º·Ö½Ú·ûÎ»ÓÚÇ°Ò»½ÚÄ©Î²£¬²»ÄÜÉ¾³ıºóÒ»½ÚµÚÒ»¸ö×Ö·û
+    Dim s As Long
+    For s = ActiveDocument.Sections.Count - 1 To 1 Step -1
+        Dim secBrk As Range
+        Set secBrk = ActiveDocument.Sections(s).Range
+        secBrk.Characters.Last.Delete
+    Next s
+
+    ' ´ÓºóÏòÇ°²åÈë·Ö½Ú·û£¬ÏÈÕıÎÄ¡¢ºóÄ¿Â¼£¬±ÜÃâ¶ÎÂäĞòºÅÆ¯ÒÆ
+    Set breakRng = ActiveDocument.Paragraphs(bodyStartPara).Range
+    If Not breakRng Is Nothing Then
+        breakRng.Collapse Direction:=1 ' wdCollapseStart
+        breakRng.InsertBreak Type:=2 ' wdSectionBreakNextPage
+    End If
+
+    Set breakRng = ActiveDocument.Paragraphs(tocStartPara).Range
+    If Not breakRng Is Nothing Then
+        breakRng.Collapse Direction:=1 ' wdCollapseStart
+        breakRng.InsertBreak Type:=2 ' wdSectionBreakNextPage
+    End If
+
+    ' ¶Ï¿ªËùÓĞ½ÚµÄÒ³Ã¼Ò³½ÅÁ´½Ó£¬²¢ÔÚ·Ö½ÚºóÖØĞÂÓ¦ÓÃÒ³ÃæÉèÖÃ¡£
+    Call BreakHeaderFooterLinks
+    Call SetupPage
+End Sub
+
+'==============================================================================
+' »ìºÏÎÄ±¾¸ñÊ½»¯£¨Î÷ÎÄ/Êı×ÖÓÃTimes New Roman£©
 '==============================================================================
 
 Private Sub FormatMixedText(para As Paragraph)
     Dim rng As Range
     Dim i As Long
     Dim charCode As Long
-    
+
+    On Error Resume Next
     Set rng = para.Range
-    
     For i = rng.Start To rng.End - 1
         Dim charRange As Range
         Set charRange = ActiveDocument.Range(i, i + 1)
-        charCode = AscW(charRange.Text)
-        If (charCode >= 32 And charCode <= 126) Then
-            charRange.Font.Name = "Times New Roman"
+        If Not charRange Is Nothing Then
+            charCode = AscW(charRange.Text)
+            If (charCode >= 32 And charCode <= 126) Then
+                charRange.Font.NameAscii = "Times New Roman"
+            End If
         End If
     Next i
 End Sub
 
 '==============================================================================
-' å­—ä½“æ£€æµ‹
+' ×ÖÌå¼ì²â
 '==============================================================================
 
 Private Function GetFont(ParamArray fonts() As Variant) As String
@@ -746,168 +1209,387 @@ Private Function FontExists(fontName As String) As Boolean
 End Function
 
 '==============================================================================
-' é¡µç 
+' Ò³Âë
 '==============================================================================
 
-Private Sub AddPageNumber()
-    Dim sec As Section, ftr As HeaderFooter, fld As Field, rng As Range
-    
-    For Each sec In ActiveDocument.Sections
-        Set ftr = sec.Footers(wdHeaderFooterPrimary)
-        ftr.Range.Delete
-        
-        Set rng = ftr.Range
-        rng.InsertAfter ChrW(&H2014) & " "
-        
-        Set rng = ftr.Range
-        rng.Collapse Direction:=wdCollapseEnd
-        Set fld = ftr.Range.Fields.Add(Range:=rng, Type:=wdFieldPage)
-        
-        Set rng = ftr.Range
-        rng.Collapse Direction:=wdCollapseEnd
-        rng.InsertAfter " " & ChrW(&H2014)
-        
-        With ftr.Range
-            .ParagraphFormat.Alignment = wdAlignParagraphCenter
-            .Font.Name = "å®‹ä½“"
-            .Font.NameFarEast = "å®‹ä½“"
-            .Font.Size = FONT_SIZE_SI
-        End With
-    Next sec
-End Sub
+Public Sub AddPageNumber()
+    Dim secCount As Long
+    Dim s As Long
 
-'==============================================================================
-' å…¶ä»–åŠŸèƒ½
-'==============================================================================
-
-Public Sub UpdatePageNumbers()
     On Error Resume Next
     ActiveDocument.ActiveWindow.View.ShowFieldCodes = False
+    secCount = ActiveDocument.Sections.Count
+    If secCount = 0 Then Exit Sub
+
+    If secCount < 3 Then
+        Call DetectDocumentStructure
+        Call EnsureSectionLayout
+        Call SetupPage
+        secCount = ActiveDocument.Sections.Count
+    End If
+
+    Call BreakHeaderFooterLinks
+    For s = 1 To secCount
+        Call ClearSectionFooters(ActiveDocument.Sections(s))
+    Next s
+
+    ' µÚ1½Ú£º·âÃæ£¬²»±àÒ³Âë¡£
+    If secCount >= 2 Then
+        ' µÚ2½Ú£ºÄ¿Â¼£¬µ×²¿¾ÓÖĞ upperRoman Ò³Âë£¬´Ó I ¿ªÊ¼¡£
+        Call AddSectionPageNumber(ActiveDocument.Sections(2), 1, 1)
+    End If
+
+    If secCount >= 3 Then
+        ' µÚ3½Ú£ºÕıÎÄ£¬µ×²¿¾ÓÖĞ°¢À­²®Êı×ÖÒ³Âë£¬´Ó 1 ¿ªÊ¼£¬²»¼ÓÆÆÕÛºÅ¡£
+        Call AddSectionPageNumber(ActiveDocument.Sections(3), 0, 1)
+    End If
+
     ActiveDocument.Fields.Update
-    MsgBox "é¡µç å·²æ›´æ–°ï¼", vbInformation, "æ›´æ–°é¡µç "
 End Sub
 
-Public Sub AddHeader(headerText As String)
-    Dim hdr As HeaderFooter
-    Set hdr = ActiveDocument.Sections(1).Headers(wdHeaderFooterPrimary)
-    hdr.Range.Delete
-    With hdr.Range
-        .Text = headerText
-        .ParagraphFormat.Alignment = wdAlignParagraphCenter
-        .Font.NameFarEast = GetFont("ä»¿å®‹_GB2312", "ä»¿å®‹", "åæ–‡ä»¿å®‹")
-        .Font.NameAscii = "Times New Roman"
-        .Font.Size = FONT_SIZE_SAN
+Private Sub BreakHeaderFooterLinks()
+    Dim s As Long, idx As Long
+    On Error Resume Next
+
+    For s = 1 To ActiveDocument.Sections.Count
+        For idx = 1 To 3
+            ActiveDocument.Sections(s).Headers(idx).LinkToPrevious = False
+            ActiveDocument.Sections(s).Footers(idx).LinkToPrevious = False
+        Next idx
+    Next s
+End Sub
+
+Private Sub ClearSectionFooters(sec As Section)
+    Dim idx As Long
+    On Error Resume Next
+
+    sec.PageSetup.DifferentFirstPageHeaderFooter = False
+    sec.PageSetup.OddAndEvenPagesHeaderFooter = False
+
+    For idx = 1 To 3
+        sec.Footers(idx).LinkToPrevious = False
+        sec.Footers(idx).Range.Delete
+    Next idx
+End Sub
+
+Private Sub ApplyFooterPageNumberStyle(ftr As HeaderFooter)
+    On Error Resume Next
+    With ftr.Range
+        .ParagraphFormat.Alignment = PAGE_NUMBER_ALIGN_CENTER
+        .Font.Name = "ËÎÌå"
+        .Font.Size = FONT_SIZE_SI
+        .Font.Color = FONT_COLOR_BLACK
     End With
 End Sub
+Private Sub AddSectionPageNumber(sec As Section, ByVal numberStyle As Long, ByVal startAt As Long)
+    Dim ftr As HeaderFooter, rng As Range
+    On Error Resume Next
 
-Public Sub FormatAllTables()
+    sec.PageSetup.DifferentFirstPageHeaderFooter = False
+    sec.PageSetup.OddAndEvenPagesHeaderFooter = False
+
+    Set ftr = sec.Footers(1) ' wdHeaderFooterPrimary
+    ftr.LinkToPrevious = False
+
+    With ftr.PageNumbers
+        .RestartNumberingAtSection = True
+        .StartingNumber = startAt
+        .NumberStyle = numberStyle
+    End With
+
+    Err.Clear
+    ftr.PageNumbers.Add PAGE_NUMBER_ALIGN_CENTER, True
+    If Err.Number <> 0 Then
+        Err.Clear
+        Set rng = ftr.Range
+        rng.Collapse Direction:=0
+        ftr.Range.Fields.Add Range:=rng, Type:=33 ' wdFieldPage
+    End If
+
+    With ftr.PageNumbers
+        .RestartNumberingAtSection = True
+        .StartingNumber = startAt
+        .NumberStyle = numberStyle
+    End With
+
+    Call ApplyFooterPageNumberStyle(ftr)
+    ftr.Range.Fields.Update
+End Sub
+'==============================================================================
+' ±í¸ñ¸ñÊ½»¯£¨ÔöÇ¿°æ£º±ß¿ò+Ïß¿í+µ¥Ôª¸ñ±ß¾à£©
+'==============================================================================
+
+Public Sub FormatAllTables(Optional ByVal showMessage As Boolean = True)
     Dim tbl As Table, cel As Cell, para As Paragraph
+
+    On Error Resume Next
+
     For Each tbl In ActiveDocument.Tables
-        tbl.Rows.Alignment = wdAlignRowCenter
+        Call ApplyStandardTableLayout(tbl)
+
         For Each cel In tbl.Range.Cells
+            Call ApplyStandardCellLayout(cel)
+
             For Each para In cel.Range.Paragraphs
-                para.Range.Font.NameFarEast = GetFont("ä»¿å®‹_GB2312", "ä»¿å®‹", "åæ–‡ä»¿å®‹")
-                para.Range.Font.NameAscii = "Times New Roman"
-                para.Range.Font.Size = FONT_SIZE_XIAOSI
-                para.Format.Alignment = wdAlignParagraphCenter
-                para.Format.LineSpacingRule = wdLineSpaceSingle
+                Call ApplyStandardTableCellParagraph(para)
             Next para
         Next cel
     Next tbl
-    MsgBox "è¡¨æ ¼æ ¼å¼åŒ–å®Œæˆï¼", vbInformation, "è¡¨æ ¼æ ¼å¼åŒ–"
+
+    If showMessage Then
+        MsgBox "±í¸ñ¸ñÊ½»¯Íê³É£¡", vbInformation, "±í¸ñ¸ñÊ½»¯"
+    End If
 End Sub
 
-Public Sub FormatTitle()
-    Dim para As Paragraph, cw As Single, undoRec As UndoRecord
-    
-    On Error GoTo ErrorHandler
-    
-    Set undoRec = Application.UndoRecord
-    undoRec.StartCustomRecord "æ ‡é¢˜æ ¼å¼åŒ–"
-    
-    cw = CentimetersToPoints(0.85) * 2
-    For Each para In Selection.Paragraphs
-        para.Format.LeftIndent = 0
-        para.Format.RightIndent = 0
-        para.Format.FirstLineIndent = cw
-        para.Format.SpaceBefore = 6
-        para.Format.SpaceAfter = 6
-    Next para
-    
-    undoRec.EndCustomRecord
-    MsgBox "æ ‡é¢˜æ ¼å¼åŒ–å®Œæˆï¼", vbInformation, "æ ‡é¢˜æ ¼å¼åŒ–"
-    Exit Sub
-    
-ErrorHandler:
+Private Sub ApplyStandardTableLayout(tbl As Table)
     On Error Resume Next
-    If Not undoRec Is Nothing Then undoRec.EndCustomRecord
-    MsgBox "å‘ç”Ÿé”™è¯¯ï¼š" & Err.Description, vbCritical, "é”™è¯¯"
+
+    tbl.Rows.Alignment = 1 ' wdAlignRowCenter
+    tbl.LeftPadding = 5.4
+    tbl.RightPadding = 5.4
+    tbl.TopPadding = 0
+    tbl.BottomPadding = 0
+
+    ' ±ê×¼¸å£º½ö±£ÁôÉÏÏÂÍâ¿òÏßºÍÄÚ²¿ºáÊúÏß£¬×óÓÒÍâ¿òÏßÎªÎŞ¡£
+    With tbl.Borders(-1) ' wdBorderTop
+        .LineStyle = 1: .LineWidth = 4: .Color = 0
+    End With
+    With tbl.Borders(-3) ' wdBorderBottom
+        .LineStyle = 1: .LineWidth = 4: .Color = 0
+    End With
+    With tbl.Borders(-5) ' wdBorderHorizontal
+        .LineStyle = 1: .LineWidth = 4: .Color = 0
+    End With
+    With tbl.Borders(-6) ' wdBorderVertical
+        .LineStyle = 1: .LineWidth = 4: .Color = 0
+    End With
+    With tbl.Borders(-2) ' wdBorderLeft
+        .LineStyle = 0
+    End With
+    With tbl.Borders(-4) ' wdBorderRight
+        .LineStyle = 0
+    End With
+End Sub
+
+Private Sub ApplyStandardCellLayout(cel As Cell)
+    On Error Resume Next
+
+    cel.LeftPadding = 5.4
+    cel.RightPadding = 5.4
+    cel.TopPadding = 0
+    cel.BottomPadding = 0
+    cel.VerticalAlignment = 1 ' wdCellAlignVerticalCenter
+End Sub
+
+Private Sub ApplyStandardTableCellParagraph(para As Paragraph)
+    On Error Resume Next
+
+    para.Range.Style = "±í¸ñÑùÊ½"
+
+    With para.Range.Font
+        .NameFarEast = GetFont("·ÂËÎ_GB2312", "·ÂËÎ", "»ªÎÄ·ÂËÎ")
+        .NameAscii = "Times New Roman"
+        .Size = FONT_SIZE_WU
+        .Bold = True
+        .Color = FONT_COLOR_BLACK
+    End With
+    With para.Format
+        .Alignment = 1 ' wdAlignParagraphCenter
+        .LineSpacingRule = LINE_RULE_MULTIPLE
+        .LineSpacing = LINE_SPACING_18
+        .SpaceBefore = 0: .SpaceAfter = 0
+        .FirstLineIndent = 0: .LeftIndent = 0: .RightIndent = 0
+    End With
 End Sub
 
 '==============================================================================
-' å¿«é€Ÿæ ·å¼åº”ç”¨
+' ÆäËû¹¦ÄÜ
+'==============================================================================
+
+Public Sub FormatSelectedParagraphs()
+    Dim p As Paragraph
+    Dim count As Long
+
+    g_FormatMode = SelectFormatMode()
+    If g_FormatMode = "" Then Exit Sub
+
+    On Error Resume Next
+    For Each p In Selection.Paragraphs
+        Call FormatSingleParagraph(p)
+        count = count + 1
+    Next p
+    On Error GoTo 0
+
+    MsgBox "Ñ¡ÖĞ¶ÎÂä¸ñÊ½»¯Íê³É£¡¹²´¦Àí " & count & " ¸ö¶ÎÂä¡£", vbInformation, "¶ÎÂä¸ñÊ½»¯"
+End Sub
+
+Public Sub UpdatePageNumbers()
+    On Error Resume Next
+    Application.ScreenUpdating = False
+    ActiveDocument.ActiveWindow.View.ShowFieldCodes = False
+
+    Call DetectDocumentStructure
+    Call EnsureSectionLayout
+    Call SetupPage
+    Call DetectDocumentStructure
+    Call AddPageNumber
+    ActiveDocument.Fields.Update
+
+    Application.ScreenUpdating = True
+    MsgBox "·Ö½ÚÒ³ÂëÒÑÖØ½¨£¡", vbInformation, "¸üĞÂÒ³Âë"
+End Sub
+Public Sub AddHeader(headerText As String)
+    On Error Resume Next
+    Dim hdr As HeaderFooter
+    Set hdr = ActiveDocument.Sections(1).Headers(1)
+    hdr.Range.Delete
+    With hdr.Range
+        .Text = headerText
+        .ParagraphFormat.Alignment = 1
+        .Font.NameFarEast = GetFont("·ÂËÎ_GB2312", "·ÂËÎ", "»ªÎÄ·ÂËÎ")
+        .Font.NameAscii = "Times New Roman"
+        .Font.Size = FONT_SIZE_SAN
+        .Font.Color = FONT_COLOR_BLACK
+    End With
+End Sub
+
+Public Sub FormatTitle()
+    Dim para As Paragraph
+    g_FormatMode = SelectFormatMode()
+    For Each para In Selection.Paragraphs
+        Call ApplyLevel1Style(para)
+    Next para
+    MsgBox "Ò»¼¶±êÌâ¸ñÊ½»¯Íê³É£¡", vbInformation, "±êÌâ¸ñÊ½»¯"
+End Sub
+
+'==============================================================================
+' ¿ìËÙÑùÊ½Ó¦ÓÃ£¨´øÍê³ÉÌáÊ¾£©
 '==============================================================================
 
 Public Sub ApplyLevel1ToSelection()
     g_FormatMode = SelectFormatMode()
     If g_FormatMode = "" Then Exit Sub
-    Dim p As Paragraph: For Each p In Selection.Paragraphs: ApplyLevel1Style p: Next
+    Dim count As Integer, p As Paragraph
+    count = 0: For Each p In Selection.Paragraphs: ApplyLevel1Style p: count = count + 1: Next
+    MsgBox "Ò»¼¶±êÌâÑùÊ½ÒÑÓ¦ÓÃ£¡¹²´¦Àí " & count & " ¸ö¶ÎÂä¡£", vbInformation, "Ò»¼¶±êÌâ"
 End Sub
 
 Public Sub ApplyLevel2ToSelection()
     g_FormatMode = SelectFormatMode()
     If g_FormatMode = "" Then Exit Sub
-    Dim p As Paragraph: For Each p In Selection.Paragraphs: ApplyLevel2Style p: Next
+    Dim count As Integer, p As Paragraph
+    count = 0: For Each p In Selection.Paragraphs: ApplyLevel2Style p: count = count + 1: Next
+    MsgBox "¶ş¼¶±êÌâÑùÊ½ÒÑÓ¦ÓÃ£¡¹²´¦Àí " & count & " ¸ö¶ÎÂä¡£", vbInformation, "¶ş¼¶±êÌâ"
 End Sub
 
 Public Sub ApplyLevel3ToSelection()
     g_FormatMode = SelectFormatMode()
     If g_FormatMode = "" Then Exit Sub
-    Dim p As Paragraph: For Each p In Selection.Paragraphs: ApplyLevel3Style p: Next
+    Dim count As Integer, p As Paragraph
+    count = 0: For Each p In Selection.Paragraphs: ApplyLevel3Style p: count = count + 1: Next
+    MsgBox "Èı¼¶±êÌâÑùÊ½ÒÑÓ¦ÓÃ£¡¹²´¦Àí " & count & " ¸ö¶ÎÂä¡£", vbInformation, "Èı¼¶±êÌâ"
 End Sub
 
 Public Sub ApplyLevel4ToSelection()
     g_FormatMode = SelectFormatMode()
     If g_FormatMode = "" Then Exit Sub
-    Dim p As Paragraph: For Each p In Selection.Paragraphs: ApplyLevel4Style p: Next
+    Dim count As Integer, p As Paragraph
+    count = 0: For Each p In Selection.Paragraphs: ApplyLevel4Style p: count = count + 1: Next
+    MsgBox "ËÄ¼¶±êÌâÑùÊ½ÒÑÓ¦ÓÃ£¡¹²´¦Àí " & count & " ¸ö¶ÎÂä¡£", vbInformation, "ËÄ¼¶±êÌâ"
 End Sub
 
 Public Sub ApplyLevel5ToSelection()
     g_FormatMode = SelectFormatMode()
     If g_FormatMode = "" Then Exit Sub
-    Dim p As Paragraph: For Each p In Selection.Paragraphs: ApplyLevel5Style p: Next
+    Dim count As Integer, p As Paragraph
+    count = 0: For Each p In Selection.Paragraphs: ApplyLevel5Style p: count = count + 1: Next
+    MsgBox "Îå¼¶±êÌâÑùÊ½ÒÑÓ¦ÓÃ£¡¹²´¦Àí " & count & " ¸ö¶ÎÂä¡£", vbInformation, "Îå¼¶±êÌâ"
 End Sub
 
 Public Sub ApplyBodyToSelection()
     g_FormatMode = SelectFormatMode()
     If g_FormatMode = "" Then Exit Sub
-    Dim p As Paragraph: For Each p In Selection.Paragraphs: ApplyBodyStyle p: Next
+    Dim count As Integer, p As Paragraph
+    count = 0: For Each p In Selection.Paragraphs: ApplyBodyStyle p: count = count + 1: Next
+    MsgBox "ÕıÎÄÑùÊ½ÒÑÓ¦ÓÃ£¡¹²´¦Àí " & count & " ¸ö¶ÎÂä¡£", vbInformation, "ÕıÎÄÑùÊ½"
 End Sub
 
 '==============================================================================
-' ä¸­æ–‡åˆ«åï¼ˆæ–¹ä¾¿è°ƒç”¨ï¼‰
+' ÖĞÎÄ±ğÃûÈë¿Ú£¨·½±ãWPSºêÁĞ±íµ÷ÓÃ£©
 '==============================================================================
 
-Public Sub æ ¼å¼åŒ–å…¬æ–‡()
+Public Sub È«ÎÄÌ×ÓÃ±¨¸æ¸ñÊ½()
     Call FormatGongwen
 End Sub
 
-Public Sub ç¬¦å·æ›¿æ¢()
+Public Sub Ìæ»»³£ÓÃµÄÖĞÎÄ±êµã()
     Call ReplaceSymbols
 End Sub
 
-Public Sub æ™ºèƒ½å¼•å·()
+Public Sub ÖÇÄÜÌæ»»ÖĞÎÄÒıºÅ()
     Call ReplaceQuotesSmart
 End Sub
 
-Public Sub æ ¼å¼åŒ–é€‰ä¸­æ®µè½()
+Public Sub °´¹æÔò¸ñÊ½»¯Ñ¡ÖĞÎÄ±¾()
     Call FormatSelectedParagraphs
 End Sub
 
-Public Sub æ ¼å¼åŒ–è¡¨æ ¼()
+Public Sub È«ÎÄ±í¸ñÌ×ÓÃ¸ñÊ½()
     Call FormatAllTables
 End Sub
 
-Public Sub æ›´æ–°é¡µç ()
+Public Sub ¸üĞÂ·Ö½ÚÒ³Âë()
+    Call UpdatePageNumbers
+End Sub
+
+Public Sub È«ÎÄÌæ»»È«²¿·ûºÅ()
+    Call ReplaceAllSymbols
+End Sub
+
+Public Sub Ñ¡ÖĞÎÄ±¾ÉèÎªÒ»¼¶±êÌâ()
+    Call FormatTitle
+End Sub
+
+Public Sub Ñ¡ÖĞÎÄ±¾ÉèÎª¶ş¼¶±êÌâ()
+    Call ApplyLevel2ToSelection
+End Sub
+
+Public Sub Ñ¡ÖĞÎÄ±¾ÉèÎªÈı¼¶±êÌâ()
+    Call ApplyLevel3ToSelection
+End Sub
+
+Public Sub Ñ¡ÖĞÎÄ±¾ÉèÎªËÄ¼¶±êÌâ()
+    Call ApplyLevel4ToSelection
+End Sub
+
+Public Sub Ñ¡ÖĞÎÄ±¾ÉèÎªÎå¼¶±êÌâ()
+    Call ApplyLevel5ToSelection
+End Sub
+
+Public Sub Ñ¡ÖĞÎÄ±¾ÉèÎªÕıÎÄ()
+    Call ApplyBodyToSelection
+End Sub
+
+Public Sub ¸ñÊ½»¯¹«ÎÄ()
+    Call FormatGongwen
+End Sub
+
+Public Sub ·ûºÅÌæ»»()
+    Call ReplaceSymbols
+End Sub
+
+Public Sub ÖÇÄÜÒıºÅ()
+    Call ReplaceQuotesSmart
+End Sub
+
+Public Sub ¸ñÊ½»¯Ñ¡ÖĞ¶ÎÂä()
+    Call FormatSelectedParagraphs
+End Sub
+
+Public Sub ¸ñÊ½»¯±í¸ñ()
+    Call FormatAllTables
+End Sub
+
+Public Sub ¸üĞÂÒ³Âë()
     Call UpdatePageNumbers
 End Sub

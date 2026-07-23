@@ -29,12 +29,28 @@ Private Const FOOTER_DISTANCE As Single = 51.03       ' 1.8cm
 ' 字号 (单位：磅)
 Private Const FONT_SIZE_ER As Single = 22             ' 二号
 Private Const FONT_SIZE_SAN As Single = 16            ' 三号
-Private Const FONT_SIZE_XIAOSI As Single = 12         ' 小四
 Private Const FONT_SIZE_SI As Single = 14             ' 四号
+Private Const FONT_SIZE_XIAOSI As Single = 12         ' 小四
+Private Const FONT_SIZE_WU As Single = 10.5           ' 五号
+Private Const FONT_COLOR_BLACK As Long = 0             ' 显式黑色
 
 ' 行距 (单位：磅)
-Private Const LINE_SPACING_30 As Single = 30
-Private Const LINE_SPACING_28 As Single = 28
+Private Const LINE_SPACING_24 As Single = 24          ' 封面标题 line=480(auto)
+Private Const LINE_SPACING_35 As Single = 35          ' 封面单位/日期固定值35磅
+Private Const LINE_SPACING_18 As Single = 18          ' 正文/标题 line=360(auto)
+
+' Word/WPS 行距规则
+Private Const LINE_RULE_EXACTLY As Long = 4           ' wdLineSpaceExactly
+Private Const LINE_RULE_MULTIPLE As Long = 5          ' wdLineSpaceMultiple
+
+' Word/WPS 内置样式与大纲级别
+Private Const STYLE_NORMAL As Long = -1             ' wdStyleNormal
+Private Const STYLE_HEADING_2 As Long = -3          ' wdStyleHeading2 / 标题 2
+Private Const STYLE_HEADING_3 As Long = -4          ' wdStyleHeading3 / 标题 3
+Private Const OUTLINE_LEVEL_2 As Long = 2           ' wdOutlineLevel2
+Private Const OUTLINE_LEVEL_3 As Long = 3           ' wdOutlineLevel3
+Private Const OUTLINE_LEVEL_BODY As Long = 10       ' wdOutlineLevelBodyText
+Private Const PAGE_NUMBER_ALIGN_CENTER As Long = 1    ' wdAlignPageNumberCenter
 
 '==============================================================================
 ' 格式模式选择（WPS版：直接固定为政府交付版，不弹窗）
@@ -74,6 +90,7 @@ Public Sub ReplaceSymbols()
 
     ' 4. 替换英文冒号为中文冒号
     Call DoReplace(":", ChrW(&HFF1A))
+    Call NormalizeHeadingNumberDots
 
     ' 5. 智能替换引号（交替左右引号）
     Call ReplaceQuotesInternal
@@ -246,6 +263,7 @@ Public Sub ReplaceAllSymbols()
     Call DoReplace("(", ChrW(&HFF08))
     Call DoReplace(")", ChrW(&HFF09))
     Call DoReplace(":", ChrW(&HFF1A))
+    Call NormalizeHeadingNumberDots
     Call ReplaceQuotesInternal
 
     On Error Resume Next
@@ -305,12 +323,42 @@ NextPara:
 
     Application.ScreenUpdating = True
 End Sub
+Private Sub NormalizeHeadingNumberDots()
+    Dim para As Paragraph
+    Dim rng As Range, dotRng As Range
+    Dim txt As String, ch As String, fullDot As String
+    Dim i As Long
 
+    On Error Resume Next
+    fullDot = ChrW(&HFF0E)
+
+    For Each para In ActiveDocument.Paragraphs
+        If para.Range.Information(12) Then GoTo NextPara
+
+        Set rng = para.Range
+        If rng.End <= rng.Start Then GoTo NextPara
+        rng.End = rng.End - 1
+        txt = rng.Text
+
+        For i = 1 To Len(txt) - 1
+            ch = Mid(txt, i, 1)
+            If ch <> " " And ch <> vbTab And ch <> ChrW(&H3000) Then
+                If IsNumeric(ch) And Mid(txt, i + 1, 1) = fullDot Then
+                    Set dotRng = ActiveDocument.Range(rng.Start + i, rng.Start + i + 1)
+                    dotRng.Text = "."
+                End If
+                Exit For
+            End If
+        Next i
+
+NextPara:
+    Next para
+End Sub
 '==============================================================================
 ' 主格式化功能 (WPS增强版：封面+目录+分节+页码)
 '==============================================================================
 
-Private Sub FormatGongwen()
+Public Sub FormatGongwen()
     Dim modeName As String
 
     g_FormatMode = SelectFormatMode()
@@ -327,6 +375,11 @@ Private Sub FormatGongwen()
 
     ' 2. 正文符号规范化 + 封面/正文统一格式
     Call ReplaceBodySymbols
+    Call DoReplace(",", ChrW(&HFF0C))
+    Call DoReplace("(", ChrW(&HFF08))
+    Call DoReplace(")", ChrW(&HFF09))
+    Call DoReplace(":", ChrW(&HFF1A))
+    Call NormalizeHeadingNumberDots
     Call ReplaceQuotesInternal
     Call FormatCoverAndBodyParagraphs
 
@@ -335,6 +388,7 @@ Private Sub FormatGongwen()
 
     ' 4. 分节与页码
     Call EnsureSectionLayout
+    Call SetupPage
     Call DetectDocumentStructure
     Call AddPageNumber
 
@@ -367,7 +421,18 @@ End Sub
 
 Private Sub SetupPage()
     On Error Resume Next
-    With ActiveDocument.PageSetup
+
+    Dim s As Long
+    If ActiveDocument.Sections.Count = 0 Then Exit Sub
+
+    For s = 1 To ActiveDocument.Sections.Count
+        Call ApplyPageSetupToSection(ActiveDocument.Sections(s))
+    Next s
+End Sub
+
+Private Sub ApplyPageSetupToSection(sec As Section)
+    On Error Resume Next
+    With sec.PageSetup
         .PageWidth = CentimetersToPoints(21)
         .PageHeight = CentimetersToPoints(29.7)
         .TopMargin = PAGE_MARGIN_TOP
@@ -376,11 +441,13 @@ Private Sub SetupPage()
         .RightMargin = PAGE_MARGIN_RIGHT
         .HeaderDistance = HEADER_DISTANCE
         .FooterDistance = FOOTER_DISTANCE
+        .DifferentFirstPageHeaderFooter = False
+        .OddAndEvenPagesHeaderFooter = False
+        .LayoutMode = 1
         .Gutter = 0
         .GutterPos = 0
     End With
 End Sub
-
 '==============================================================================
 ' 文档结构检测（封面/目录/正文分界）
 '==============================================================================
@@ -421,9 +488,12 @@ Private Sub DetectDocumentStructure()
             g_TocTitleIndex = i
         End If
 
-        ' 识别正文起点（第一个二级标题）
-        If IsLevel2Text(txt) And g_BodyStartIndex = 0 And i > 5 Then
-            g_BodyStartIndex = i
+        ' 识别正文起点（章标题、节标题或第一个正文层级标题）
+        If g_BodyStartIndex = 0 And i > g_CoverDateIndex Then
+            If g_TocTitleIndex > 0 And i > g_TocTitleIndex And IsTocEntryParagraph(para) Then GoTo NextStructPara
+            If IsBodyStartText(txt) Then
+                g_BodyStartIndex = i
+            End If
         End If
 
 NextStructPara:
@@ -557,13 +627,36 @@ Private Function IsTocTitleText(ByVal txt As String) As Boolean
     IsTocTitleText = (normalized = ChrW(&H76EE) & ChrW(&H5F55)) ' 目录
 End Function
 
-Private Function IsLevel2Text(ByVal txt As String) As Boolean
+Private Function IsChineseTopHeadingText(ByVal txt As String) As Boolean
     Dim cnNumbers As String, dunHao As String
     cnNumbers = ChrW(&H4E00) & ChrW(&H4E8C) & ChrW(&H4E09) & ChrW(&H56DB) & _
                 ChrW(&H4E94) & ChrW(&H516D) & ChrW(&H4E03) & ChrW(&H516B) & _
                 ChrW(&H4E5D) & ChrW(&H5341)
     dunHao = ChrW(&H3001)
-    IsLevel2Text = (InStr(cnNumbers, Left(txt, 1)) > 0 And InStr(txt, dunHao) > 0 And InStr(txt, dunHao) <= 3)
+    IsChineseTopHeadingText = (InStr(cnNumbers, Left(txt, 1)) > 0 And InStr(txt, dunHao) > 0 And InStr(txt, dunHao) <= 3)
+End Function
+
+Private Function IsBodyStartText(ByVal txt As String) As Boolean
+    Dim normalized As String
+    normalized = Replace(Replace(Replace(txt, " ", ""), vbTab, ""), ChrW(&H3000), "")
+    IsBodyStartText = IsChineseTopHeadingText(normalized)
+End Function
+Private Function IsTocEntryParagraph(para As Paragraph) As Boolean
+    On Error Resume Next
+    Dim styleName As String
+    styleName = LCase(CStr(para.Style))
+
+    If InStr(styleName, "toc") > 0 Or InStr(styleName, ChrW(&H76EE) & ChrW(&H5F55)) > 0 Then
+        IsTocEntryParagraph = True
+        Exit Function
+    End If
+
+    If InStr(para.Range.Text, vbTab) > 0 Then
+        IsTocEntryParagraph = True
+        Exit Function
+    End If
+
+    IsTocEntryParagraph = False
 End Function
 
 '==============================================================================
@@ -653,6 +746,7 @@ Private Sub FormatSingleParagraph(para As Paragraph, Optional ByVal paraIndex As
         Case "cover_date": Call ApplyCoverDateStyle(para)
         Case "table_title": Call ApplyTableTitleStyle(para)
         Case "figure_title": Call ApplyFigureTitleStyle(para)
+        Case "note": Call ApplyNoteStyle(para)
         Case "toc_title": Call ApplyTocTitleStyle(para)
         Case "toc_entry": Call ApplyTocEntryStyle(para)
         Case Else: Call ApplyBodyStyle(para)
@@ -667,67 +761,63 @@ End Sub
 
 Private Function DetectLevel(txt As String) As String
     Dim firstChar As String, secondChar As String
-    Dim cnNumbers As String, dunHao As String, fullDot As String, lBracket As String
+    Dim cnNumbers As String, dunHao As String, lBracket As String
+    Dim normalized As String
 
     cnNumbers = ChrW(&H4E00) & ChrW(&H4E8C) & ChrW(&H4E09) & ChrW(&H56DB) & _
                 ChrW(&H4E94) & ChrW(&H516D) & ChrW(&H4E03) & ChrW(&H516B) & _
                 ChrW(&H4E5D) & ChrW(&H5341)
     dunHao = ChrW(&H3001)      ' 顿号
-    fullDot = ChrW(&HFF0E)     ' 全角点
     lBracket = ChrW(&HFF08)    ' 全角左括号
 
     txt = Replace(Replace(txt, vbCr, ""), vbLf, "")
-    If Len(txt) = 0 Then DetectLevel = "body": Exit Function
+    normalized = Replace(Replace(Replace(txt, " ", ""), vbTab, ""), ChrW(&H3000), "")
+    If Len(normalized) = 0 Then DetectLevel = "body": Exit Function
 
-    firstChar = Left(txt, 1)
-    If Len(txt) > 1 Then secondChar = Mid(txt, 2, 1) Else secondChar = ""
+    firstChar = Left(normalized, 1)
+    If Len(normalized) > 1 Then secondChar = Mid(normalized, 2, 1) Else secondChar = ""
 
     ' 表格标题
     If firstChar = ChrW(&H8868) Then DetectLevel = "table_title": Exit Function
     ' 图片标题
     If firstChar = ChrW(&H56FE) Then DetectLevel = "figure_title": Exit Function
+    ' 数据来源/注释
+    If IsNoteText(normalized) Then DetectLevel = "note": Exit Function
     ' 目录标题
-    If IsTocTitleText(txt) Then DetectLevel = "toc_title": Exit Function
+    If IsTocTitleText(normalized) Then DetectLevel = "toc_title": Exit Function
 
-    ' 章标题：如"第一章""第1章"
-    If txt Like "*第*章*" Then
+    ' 一级标题：一、二、三... + 顿号
+    If IsChineseTopHeadingText(normalized) Then
         DetectLevel = "level1": Exit Function
     End If
 
-    ' 节标题：如"第一节""第1节"
-    If txt Like "*第*节*" Then
-        DetectLevel = "level1b": Exit Function
-    End If
-
-    ' 二级标题：一、二、三... + 顿号
-    If InStr(cnNumbers, firstChar) > 0 And InStr(txt, dunHao) > 0 And InStr(txt, dunHao) <= 3 Then
+    ' 二级标题：（一）（二）... 全角/半角括号 + 中文数字
+    If (firstChar = lBracket Or firstChar = "(") And InStr(cnNumbers, secondChar) > 0 Then
         DetectLevel = "level2": Exit Function
     End If
 
-    ' 三级标题：（一）（二）... 全角括号 + 中文数字
-    If (firstChar = lBracket Or firstChar = "(") And InStr(cnNumbers, secondChar) > 0 Then
+    ' 三级标题：1. 2. 3. ... 数字 + 半角点
+    If IsNumeric(firstChar) And secondChar = "." Then
         DetectLevel = "level3": Exit Function
     End If
 
-    ' 四级标题：1．2．3．... 数字 + 全角点
-    If IsNumeric(firstChar) And InStr(txt, fullDot) > 0 And InStr(txt, fullDot) <= 3 Then
+    ' 四级标题：（1）/(1) ... 括号 + 阿拉伯数字
+    If (firstChar = lBracket Or firstChar = "(") And IsNumeric(secondChar) Then
         DetectLevel = "level4": Exit Function
     End If
 
-    ' 五级标题：(1) (2)... 括号 + 阿拉伯数字
-    If (firstChar = lBracket Or firstChar = "(") And IsNumeric(secondChar) Then
-        DetectLevel = "level5": Exit Function
-    End If
-
-    ' 六级标题：带圈数字
-    If IsCircledNumber(firstChar) Then DetectLevel = "level6": Exit Function
-
-    ' 封面标题：在封面标题范围内的body段落
-    If g_CoverTitleEnd > 0 Then DetectLevel = "cover_title": Exit Function
+    ' 五级标题：带圈数字
+    If IsCircledNumber(firstChar) Then DetectLevel = "level5": Exit Function
 
     DetectLevel = "body"
 End Function
 
+Private Function IsNoteText(ByVal txt As String) As Boolean
+    IsNoteText = (Left(txt, 5) = ChrW(&H6570) & ChrW(&H636E) & ChrW(&H6765) & ChrW(&H6E90) & ChrW(&HFF1A)) Or _
+                 (Left(txt, 3) = ChrW(&H6765) & ChrW(&H6E90) & ChrW(&HFF1A)) Or _
+                 (Left(txt, 2) = ChrW(&H6CE8) & ChrW(&HFF1A)) Or _
+                 (Left(txt, 3) = ChrW(&H8BF4) & ChrW(&H660E) & ChrW(&HFF1A))
+End Function
 Private Function IsCircledNumber(char As String) As Boolean
     Dim code As Long
     If Len(char) = 0 Then IsCircledNumber = False: Exit Function
@@ -739,258 +829,230 @@ End Function
 ' 样式应用函数
 '==============================================================================
 
-Private Sub ApplyLevel1Style(para As Paragraph)
+Private Function StandardFirstLineIndent() As Single
+    StandardFirstLineIndent = 32
+End Function
+
+Private Sub ApplyBuiltInHeadingLevel(para As Paragraph, ByVal styleId As Long, ByVal outlineLevel As Long)
     On Error Resume Next
-    With para.Range.Font
-        .NameFarEast = GetFont("方正小标宋简体", "华文中宋", "宋体")
-        .NameAscii = "Times New Roman"
-        .Size = FONT_SIZE_ER
-        .Bold = False
-    End With
+    para.Range.Style = styleId
+    para.Format.OutlineLevel = outlineLevel
+End Sub
+
+Private Sub ApplyBodyOutlineLevel(para As Paragraph)
+    On Error Resume Next
+    para.Range.Style = STYLE_NORMAL
+    para.Format.OutlineLevel = OUTLINE_LEVEL_BODY
+End Sub
+Private Sub ApplyAutoLineSpacing(fmt As ParagraphFormat, Optional ByVal lineSpacing As Single = LINE_SPACING_18)
+    On Error Resume Next
+    fmt.LineSpacingRule = LINE_RULE_MULTIPLE
+    fmt.LineSpacing = lineSpacing
+End Sub
+
+Private Sub ApplyStandardParagraphFormat(para As Paragraph, ByVal alignment As Long, ByVal firstIndent As Single, Optional ByVal lineSpacing As Single = LINE_SPACING_18)
+    On Error Resume Next
     With para.Format
-        .Alignment = 1: .LineSpacingRule = 4: .LineSpacing = LINE_SPACING_30
-        .SpaceBefore = 8: .SpaceAfter = 8: .FirstLineIndent = 0: .LeftIndent = 0
+        .Alignment = alignment
+        Call ApplyAutoLineSpacing(para.Format, lineSpacing)
+        .SpaceBefore = 0: .SpaceAfter = 0
+        .FirstLineIndent = firstIndent: .LeftIndent = 0: .RightIndent = 0
     End With
 End Sub
 
-Private Sub ApplyLevel1bStyle(para As Paragraph)
-    ' 节标题（如"第一节"）：楷体_GB2312 三号，居中，固定值30磅
+Private Sub ApplyLevel1Style(para As Paragraph)
     On Error Resume Next
+    Call ApplyBuiltInHeadingLevel(para, STYLE_HEADING_2, OUTLINE_LEVEL_2)
     With para.Range.Font
-        .NameFarEast = GetFont("楷体_GB2312", "楷体", "华文楷体")
+        .NameFarEast = GetFont("黑体", "微软雅黑", "宋体")
         .NameAscii = "Times New Roman"
         .Size = FONT_SIZE_SAN
         .Bold = False
+        .Color = FONT_COLOR_BLACK
     End With
-    With para.Format
-        .Alignment = 1: .LineSpacingRule = 4: .LineSpacing = LINE_SPACING_30
-        .SpaceBefore = 18: .SpaceAfter = 18: .FirstLineIndent = 0: .LeftIndent = 0
-    End With
+    Call ApplyStandardParagraphFormat(para, 3, StandardFirstLineIndent())
+End Sub
+
+Private Sub ApplyLevel1bStyle(para As Paragraph)
+    ' 旧版“第一节”入口保留为兼容项；新标准不再主动识别章/节层级。
+    Call ApplyLevel1Style(para)
 End Sub
 
 Private Sub ApplyCoverTitleStyle(para As Paragraph)
     On Error Resume Next
+    Call ApplyBodyOutlineLevel(para)
     With para.Range.Font
         .NameFarEast = GetFont("方正小标宋简体", "华文中宋", "宋体")
         .NameAscii = "Times New Roman"
         .Size = FONT_SIZE_ER
         .Bold = False
+        .Color = FONT_COLOR_BLACK
     End With
-    With para.Format
-        .Alignment = 1: .LineSpacingRule = 4: .LineSpacing = LINE_SPACING_30
-        .SpaceBefore = 12: .SpaceAfter = 12
-        .FirstLineIndent = 0: .LeftIndent = 0: .RightIndent = 0
-    End With
+    Call ApplyStandardParagraphFormat(para, 1, 0, LINE_SPACING_24)
 End Sub
 
 Private Sub ApplyCoverOrgStyle(para As Paragraph)
     On Error Resume Next
+    Call ApplyBodyOutlineLevel(para)
     With para.Range.Font
         .NameFarEast = GetFont("楷体_GB2312", "楷体", "华文楷体")
         .NameAscii = "Times New Roman"
         .Size = FONT_SIZE_SAN
         .Bold = False
+        .Color = FONT_COLOR_BLACK
     End With
     With para.Format
-        .Alignment = 1: .LineSpacingRule = 4: .LineSpacing = LINE_SPACING_28
-        .SpaceBefore = 24: .SpaceAfter = 0
+        .Alignment = 1: .LineSpacingRule = LINE_RULE_EXACTLY: .LineSpacing = LINE_SPACING_35
+        .SpaceBefore = 0: .SpaceAfter = 0
         .FirstLineIndent = 0: .LeftIndent = 0: .RightIndent = 0
     End With
 End Sub
 
 Private Sub ApplyCoverDateStyle(para As Paragraph)
-    On Error Resume Next
-    With para.Range.Font
-        .NameFarEast = GetFont("楷体_GB2312", "楷体", "华文楷体")
-        .NameAscii = "Times New Roman"
-        .Size = FONT_SIZE_SAN
-        .Bold = False
-    End With
-    With para.Format
-        .Alignment = 1: .LineSpacingRule = 4: .LineSpacing = LINE_SPACING_28
-        .SpaceBefore = 24: .SpaceAfter = 0
-        .FirstLineIndent = 0: .LeftIndent = 0: .RightIndent = 0
-    End With
+    Call ApplyCoverOrgStyle(para)
 End Sub
 
 Private Sub ApplyLevel2Style(para As Paragraph)
-    Dim indentValue As Single
     On Error Resume Next
-    indentValue = CentimetersToPoints(0.85) * 2  ' 2字符
-
-    With para.Range.Font
-        .NameFarEast = GetFont("黑体", "微软雅黑", "宋体")
-        .NameAscii = "Times New Roman"
-        .Size = FONT_SIZE_SAN
-        .Bold = False
-    End With
-    With para.Format
-        .Alignment = 0: .LineSpacingRule = 4: .LineSpacing = LINE_SPACING_30
-        .SpaceBefore = 8: .SpaceAfter = 8
-        If g_FormatMode = "government" Then
-            .FirstLineIndent = indentValue: .LeftIndent = 0
-        Else
-            .FirstLineIndent = 0: .LeftIndent = indentValue
-        End If
-    End With
-End Sub
-
-Private Sub ApplyLevel3Style(para As Paragraph)
-    Dim indentValue As Single
-    On Error Resume Next
-    indentValue = CentimetersToPoints(0.85) * 2
-
+    Call ApplyBuiltInHeadingLevel(para, STYLE_HEADING_3, OUTLINE_LEVEL_3)
     With para.Range.Font
         .NameFarEast = GetFont("楷体_GB2312", "楷体", "华文楷体")
         .NameAscii = "Times New Roman"
         .Size = FONT_SIZE_SAN
         .Bold = False
+        .Color = FONT_COLOR_BLACK
     End With
-    With para.Format
-        .Alignment = 0: .LineSpacingRule = 4: .LineSpacing = LINE_SPACING_28
-        .SpaceBefore = 8: .SpaceAfter = 8
-        If g_FormatMode = "government" Then
-            .FirstLineIndent = indentValue: .LeftIndent = 0
-        Else
-            .FirstLineIndent = 0: .LeftIndent = indentValue
-        End If
+    Call ApplyStandardParagraphFormat(para, 3, StandardFirstLineIndent())
+End Sub
+
+Private Sub ApplyLevel3Style(para As Paragraph)
+    On Error Resume Next
+    Call ApplyBodyOutlineLevel(para)
+    With para.Range.Font
+        .NameFarEast = GetFont("仿宋_GB2312", "仿宋", "华文仿宋")
+        .NameAscii = "Times New Roman"
+        .Size = FONT_SIZE_SAN
+        .Bold = False
+        .Color = FONT_COLOR_BLACK
     End With
+    Call ApplyStandardParagraphFormat(para, 3, StandardFirstLineIndent())
 End Sub
 
 Private Sub ApplyLevel4Style(para As Paragraph)
-    Dim indentValue As Single
-    On Error Resume Next
-    indentValue = CentimetersToPoints(0.85) * 2
-
-    With para.Range.Font
-        .NameFarEast = GetFont("仿宋_GB2312", "仿宋", "华文仿宋")
-        .NameAscii = "Times New Roman"
-        .Size = FONT_SIZE_SAN
-        .Bold = False
-    End With
-    With para.Format
-        .Alignment = 0: .LineSpacingRule = 4: .LineSpacing = LINE_SPACING_28
-        .SpaceBefore = 8: .SpaceAfter = 8
-        If g_FormatMode = "government" Then
-            .FirstLineIndent = indentValue: .LeftIndent = 0
-        Else
-            .FirstLineIndent = 0: .LeftIndent = indentValue
-        End If
-    End With
+    Call ApplyBodyStyle(para)
 End Sub
 
 Private Sub ApplyLevel5Style(para As Paragraph)
-    Dim indentValue As Single
-    On Error Resume Next
-    indentValue = CentimetersToPoints(0.85) * 2
-
-    With para.Range.Font
-        .NameFarEast = GetFont("仿宋_GB2312", "仿宋", "华文仿宋")
-        .NameAscii = "Times New Roman"
-        .Size = FONT_SIZE_SAN
-        .Bold = False
-    End With
-    With para.Format
-        .Alignment = 0: .LineSpacingRule = 4: .LineSpacing = LINE_SPACING_28
-        .SpaceBefore = 8: .SpaceAfter = 8
-        If g_FormatMode = "government" Then
-            .FirstLineIndent = indentValue: .LeftIndent = 0
-        Else
-            .FirstLineIndent = 0: .LeftIndent = indentValue
-        End If
-    End With
+    Call ApplyBodyStyle(para)
 End Sub
 
 Private Sub ApplyLevel6Style(para As Paragraph)
-    On Error Resume Next
-    With para.Range.Font
-        .NameFarEast = GetFont("仿宋_GB2312", "仿宋", "华文仿宋")
-        .NameAscii = "Times New Roman"
-        .Size = FONT_SIZE_SAN
-        .Bold = False
-    End With
-    With para.Format
-        .Alignment = 3: .LineSpacingRule = 4: .LineSpacing = LINE_SPACING_28
-        .SpaceBefore = 0: .SpaceAfter = 0
-        .FirstLineIndent = CentimetersToPoints(0.85) * 2: .LeftIndent = 0
-    End With
+    Call ApplyBodyStyle(para)
 End Sub
 
 Private Sub ApplyBodyStyle(para As Paragraph)
     On Error Resume Next
+    Call ApplyBodyOutlineLevel(para)
     With para.Range.Font
         .NameFarEast = GetFont("仿宋_GB2312", "仿宋", "华文仿宋")
         .NameAscii = "Times New Roman"
         .Size = FONT_SIZE_SAN
         .Bold = False
+        .Color = FONT_COLOR_BLACK
     End With
-    With para.Format
-        .Alignment = 0: .LineSpacingRule = 4: .LineSpacing = LINE_SPACING_28
-        .SpaceBefore = 0: .SpaceAfter = 0
-        .FirstLineIndent = CentimetersToPoints(0.85) * 2: .LeftIndent = 0
-    End With
+    Call ApplyStandardParagraphFormat(para, 3, StandardFirstLineIndent())
 End Sub
 
 Private Sub ApplyTableTitleStyle(para As Paragraph)
     On Error Resume Next
+    Call ApplyBodyOutlineLevel(para)
     With para.Range.Font
         .NameFarEast = GetFont("黑体", "微软雅黑", "宋体")
         .NameAscii = "Times New Roman"
         .Size = FONT_SIZE_XIAOSI
         .Bold = False
+        .Color = FONT_COLOR_BLACK
     End With
-    With para.Format
-        .Alignment = 1: .LineSpacingRule = 0
-        .SpaceBefore = 8: .SpaceAfter = 8: .FirstLineIndent = 0: .LeftIndent = 0
-    End With
+    Call ApplyStandardParagraphFormat(para, 1, 0)
 End Sub
 
 Private Sub ApplyFigureTitleStyle(para As Paragraph)
+    Call ApplyTableTitleStyle(para)
+End Sub
+
+Private Sub ApplyNoteStyle(para As Paragraph)
     On Error Resume Next
+    Call ApplyBodyOutlineLevel(para)
     With para.Range.Font
-        .NameFarEast = GetFont("黑体", "微软雅黑", "宋体")
+        .NameFarEast = GetFont("仿宋_GB2312", "仿宋", "华文仿宋")
         .NameAscii = "Times New Roman"
-        .Size = FONT_SIZE_XIAOSI
+        .Size = FONT_SIZE_WU
         .Bold = False
+        .Color = FONT_COLOR_BLACK
     End With
-    With para.Format
-        .Alignment = 1: .LineSpacingRule = 0
-        .SpaceBefore = 0: .SpaceAfter = 0: .FirstLineIndent = 0: .LeftIndent = 0
-    End With
+    Call ApplyStandardParagraphFormat(para, 3, StandardFirstLineIndent())
+End Sub
+
+Private Sub EnsureRightDotTab(fmt As ParagraphFormat, ByVal position As Single)
+    On Error Resume Next
+    fmt.TabStops.ClearAll
+    fmt.TabStops.Add Position:=position, Alignment:=2, Leader:=1
 End Sub
 
 Private Sub ApplyTocTitleStyle(para As Paragraph)
     On Error Resume Next
+    Call ApplyBodyOutlineLevel(para)
     With para.Range.Font
         .NameFarEast = GetFont("黑体", "微软雅黑", "宋体")
         .NameAscii = "Times New Roman"
-        .Size = 20  ' 20pt
-        .Bold = False
+        .Size = 18
+        .Bold = True
+        .Color = FONT_COLOR_BLACK
     End With
     With para.Format
-        .Alignment = 1: .LineSpacingRule = 4: .LineSpacing = 28
-        .SpaceBefore = 8: .SpaceAfter = 8: .FirstLineIndent = 0: .LeftIndent = 0
-    End With
-End Sub
-
-Private Sub ApplyTocEntryStyle(para As Paragraph)
-    On Error Resume Next
-    With para.Range.Font
-        .NameFarEast = GetFont("仿宋_GB2312", "仿宋", "华文仿宋")
-        .NameAscii = "Times New Roman"
-        .Size = 16  ' 16pt
-        .Bold = False
-    End With
-    With para.Format
-        .Alignment = 0: .LineSpacingRule = 4: .LineSpacing = 28
+        .Alignment = 1
+        Call ApplyAutoLineSpacing(para.Format, LINE_SPACING_18)
         .SpaceBefore = 0: .SpaceAfter = 0
-        .FirstLineIndent = CentimetersToPoints(0.85) * 2: .LeftIndent = 0
+        .FirstLineIndent = 0: .LeftIndent = 0: .RightIndent = 0
+        Call EnsureRightDotTab(para.Format, 415)
     End With
 End Sub
 
-'==============================================================================
-' 目录段落格式化
-'==============================================================================
+Private Sub ApplyTocEntryStyle(para As Paragraph, Optional ByVal tocText As String = "")
+    Dim normalized As String
+    Dim isSecondLevel As Boolean
+
+    On Error Resume Next
+    If tocText = "" Then tocText = GetCleanParaText(para)
+    normalized = Replace(Replace(Replace(tocText, " ", ""), vbTab, ""), ChrW(&H3000), "")
+    isSecondLevel = (Left(normalized, 1) = ChrW(&HFF08) Or Left(normalized, 1) = "(")
+
+    With para.Range.Font
+        If isSecondLevel Then
+            .NameFarEast = GetFont("楷体", "楷体_GB2312", "华文楷体")
+        Else
+            .NameFarEast = GetFont("黑体", "微软雅黑", "宋体")
+        End If
+        .NameAscii = "Times New Roman"
+        .Size = FONT_SIZE_SI
+        .Bold = False
+        .Color = FONT_COLOR_BLACK
+    End With
+
+    With para.Format
+        .Alignment = 3
+        Call ApplyAutoLineSpacing(para.Format, LINE_SPACING_18)
+        .SpaceBefore = 0: .SpaceAfter = 0
+        .FirstLineIndent = StandardFirstLineIndent()
+        If isSecondLevel Then
+            .LeftIndent = StandardFirstLineIndent()
+        Else
+            .LeftIndent = 0
+        End If
+        .RightIndent = 0
+        Call EnsureRightDotTab(para.Format, 442.2)
+    End With
+End Sub
 
 Private Sub FormatTocParagraphs()
     Dim i As Long
@@ -1011,7 +1073,7 @@ Private Sub FormatTocParagraphs()
         If IsTocTitleText(txt) Then
             Call ApplyTocTitleStyle(para)
         Else
-            Call ApplyTocEntryStyle(para)
+            Call ApplyTocEntryStyle(para, txt)
         End If
 
 NextTocPara:
@@ -1026,7 +1088,7 @@ Private Sub UpdateDocumentToc()
     On Error Resume Next
     Dim fld As Field
     For Each fld In ActiveDocument.Fields
-        If fld.Type = 33 Then ' wdFieldTOC = 33
+        If fld.Type = 13 Then ' wdFieldTOC
             fld.Update
         End If
     Next fld
@@ -1040,66 +1102,65 @@ Private Sub EnsureSectionLayout()
     On Error Resume Next
 
     Dim coverEndPara As Long
-    Dim tocBreakPara As Long
-    Dim bodyBreakPara As Long
+    Dim tocStartPara As Long
+    Dim bodyStartPara As Long
     Dim totalParas As Long
     Dim breakRng As Range
 
     totalParas = ActiveDocument.Paragraphs.Count
+    If totalParas < 3 Then Exit Sub
 
     ' 确定封面结束位置
     If g_CoverDateIndex > 0 Then
         coverEndPara = g_CoverDateIndex
     Else
-        coverEndPara = 5
+        coverEndPara = 1
     End If
 
-    ' 确定目录结束位置
-    If g_TocEndIndex > 0 Then
-        tocBreakPara = g_TocEndIndex
+    ' 确定目录起点
+    If g_TocTitleIndex > 0 Then
+        tocStartPara = g_TocTitleIndex
     Else
-        tocBreakPara = coverEndPara + 5
+        tocStartPara = coverEndPara + 1
     End If
-    If tocBreakPara >= totalParas Then tocBreakPara = totalParas - 1
-    If tocBreakPara <= coverEndPara Then tocBreakPara = coverEndPara + 1
+    If tocStartPara < 2 Then tocStartPara = 2
+    If tocStartPara > totalParas Then tocStartPara = totalParas
 
     ' 确定正文起点
     If g_BodyStartIndex > 0 Then
-        bodyBreakPara = g_BodyStartIndex
+        bodyStartPara = g_BodyStartIndex
+    ElseIf g_TocEndIndex > 0 Then
+        bodyStartPara = g_TocEndIndex + 1
     Else
-        bodyBreakPara = tocBreakPara + 2
+        bodyStartPara = tocStartPara + 1
     End If
-    If bodyBreakPara >= totalParas Then bodyBreakPara = totalParas - 1
+    If bodyStartPara <= tocStartPara Then bodyStartPara = tocStartPara + 1
+    If bodyStartPara > totalParas Then bodyStartPara = totalParas
 
-    ' 清除已有的分节符
+    ' 清除已有的分节符：分节符位于前一节末尾，不能删除后一节第一个字符
     Dim s As Long
-    For s = ActiveDocument.Sections.Count To 2 Step -1
+    For s = ActiveDocument.Sections.Count - 1 To 1 Step -1
         Dim secBrk As Range
         Set secBrk = ActiveDocument.Sections(s).Range
-        secBrk.Characters(1).Delete
+        secBrk.Characters.Last.Delete
     Next s
 
-    ' 从后向前插入分节符（NextPage分节符）
-    ' 先插正文分节符
-    Set breakRng = ActiveDocument.Paragraphs(bodyBreakPara).Range
+    ' 从后向前插入分节符，先正文、后目录，避免段落序号漂移
+    Set breakRng = ActiveDocument.Paragraphs(bodyStartPara).Range
     If Not breakRng Is Nothing Then
+        breakRng.Collapse Direction:=1 ' wdCollapseStart
         breakRng.InsertBreak Type:=2 ' wdSectionBreakNextPage
     End If
 
-    ' 再插目录分节符
-    Set breakRng = ActiveDocument.Paragraphs(tocBreakPara).Range
+    Set breakRng = ActiveDocument.Paragraphs(tocStartPara).Range
     If Not breakRng Is Nothing Then
+        breakRng.Collapse Direction:=1 ' wdCollapseStart
         breakRng.InsertBreak Type:=2 ' wdSectionBreakNextPage
     End If
 
-    ' 断开所有节的页眉页脚链接
-    For s = 2 To ActiveDocument.Sections.Count
-        Dim hdr As HeaderFooter, ftr As HeaderFooter
-        Set hdr = ActiveDocument.Sections(s).Headers(1)
-        Set ftr = ActiveDocument.Sections(s).Footers(1)
-        hdr.LinkToPrevious = False
-        ftr.LinkToPrevious = False
-    Next s
+    ' 断开所有节的页眉页脚链接，并在分节后重新应用页面设置。
+    Call BreakHeaderFooterLinks
+    Call SetupPage
 End Sub
 
 '==============================================================================
@@ -1151,125 +1212,126 @@ End Function
 ' 页码
 '==============================================================================
 
-Private Sub AddPageNumber()
+Public Sub AddPageNumber()
     Dim secCount As Long
-    Dim ftr As HeaderFooter, rng As Range
+    Dim s As Long
 
     On Error Resume Next
     ActiveDocument.ActiveWindow.View.ShowFieldCodes = False
     secCount = ActiveDocument.Sections.Count
+    If secCount = 0 Then Exit Sub
 
-    If secCount >= 1 Then
-        ' 第1节：封面 — 不编页码
-        Set ftr = ActiveDocument.Sections(1).Footers(1)
-        ftr.Range.Delete
-        ftr.PageNumbers.StartingNumber = 1
+    If secCount < 3 Then
+        Call DetectDocumentStructure
+        Call EnsureSectionLayout
+        Call SetupPage
+        secCount = ActiveDocument.Sections.Count
     End If
 
+    Call BreakHeaderFooterLinks
+    For s = 1 To secCount
+        Call ClearSectionFooters(ActiveDocument.Sections(s))
+    Next s
+
+    ' 第1节：封面，不编页码。
     If secCount >= 2 Then
-        ' 第2节：目录 — 底部居中页码，upperRoman 格式
-        Set ftr = ActiveDocument.Sections(2).Footers(1)
-        ftr.Range.Delete
-        Set rng = ftr.Range
-        rng.InsertAfter ChrW(&H2014) & " "
-        Set rng = ftr.Range
-        rng.Collapse Direction:=0
-        ftr.Range.Fields.Add Range:=rng, Type:=33 ' wdFieldPage
-        Set rng = ftr.Range
-        rng.Collapse Direction:=0
-        rng.InsertAfter " " & ChrW(&H2014)
-        With ftr.Range
-            .ParagraphFormat.Alignment = 1
-            .Font.Name = "宋体"
-            .Font.Size = FONT_SIZE_SI
-        End With
-        ftr.PageNumbers.NumberStyle = 2 ' wdPageNumberStyleUpperCaseRoman = 2
-        ftr.PageNumbers.StartingNumber = 1
-        ftr.Range.Fields.Update
+        ' 第2节：目录，底部居中 upperRoman 页码，从 I 开始。
+        Call AddSectionPageNumber(ActiveDocument.Sections(2), 1, 1)
     End If
 
     If secCount >= 3 Then
-        ' 第3节：正文 — 底部居中页码，从1开始，- N - 样式
-        Set ftr = ActiveDocument.Sections(3).Footers(1)
-        ftr.Range.Delete
-        Set rng = ftr.Range
-        rng.InsertAfter ChrW(&H2014) & " "
-        Set rng = ftr.Range
-        rng.Collapse Direction:=0
-        ftr.Range.Fields.Add Range:=rng, Type:=33 ' wdFieldPage
-        Set rng = ftr.Range
-        rng.Collapse Direction:=0
-        rng.InsertAfter " " & ChrW(&H2014)
-        With ftr.Range
-            .ParagraphFormat.Alignment = 1
-            .Font.Name = "宋体"
-            .Font.Size = FONT_SIZE_SI
-        End With
-        ftr.PageNumbers.RestartNumberingAtSection = True
-        ftr.PageNumbers.StartingNumber = 1
-        ftr.PageNumbers.NumberStyle = 0 ' wdPageNumberStyleArabic = 0
-        ftr.Range.Fields.Update
+        ' 第3节：正文，底部居中阿拉伯数字页码，从 1 开始，不加破折号。
+        Call AddSectionPageNumber(ActiveDocument.Sections(3), 0, 1)
     End If
 
     ActiveDocument.Fields.Update
 End Sub
 
+Private Sub BreakHeaderFooterLinks()
+    Dim s As Long, idx As Long
+    On Error Resume Next
+
+    For s = 1 To ActiveDocument.Sections.Count
+        For idx = 1 To 3
+            ActiveDocument.Sections(s).Headers(idx).LinkToPrevious = False
+            ActiveDocument.Sections(s).Footers(idx).LinkToPrevious = False
+        Next idx
+    Next s
+End Sub
+
+Private Sub ClearSectionFooters(sec As Section)
+    Dim idx As Long
+    On Error Resume Next
+
+    sec.PageSetup.DifferentFirstPageHeaderFooter = False
+    sec.PageSetup.OddAndEvenPagesHeaderFooter = False
+
+    For idx = 1 To 3
+        sec.Footers(idx).LinkToPrevious = False
+        sec.Footers(idx).Range.Delete
+    Next idx
+End Sub
+
+Private Sub ApplyFooterPageNumberStyle(ftr As HeaderFooter)
+    On Error Resume Next
+    With ftr.Range
+        .ParagraphFormat.Alignment = PAGE_NUMBER_ALIGN_CENTER
+        .Font.Name = "宋体"
+        .Font.Size = FONT_SIZE_SI
+        .Font.Color = FONT_COLOR_BLACK
+    End With
+End Sub
+Private Sub AddSectionPageNumber(sec As Section, ByVal numberStyle As Long, ByVal startAt As Long)
+    Dim ftr As HeaderFooter, rng As Range
+    On Error Resume Next
+
+    sec.PageSetup.DifferentFirstPageHeaderFooter = False
+    sec.PageSetup.OddAndEvenPagesHeaderFooter = False
+
+    Set ftr = sec.Footers(1) ' wdHeaderFooterPrimary
+    ftr.LinkToPrevious = False
+
+    With ftr.PageNumbers
+        .RestartNumberingAtSection = True
+        .StartingNumber = startAt
+        .NumberStyle = numberStyle
+    End With
+
+    Err.Clear
+    ftr.PageNumbers.Add PAGE_NUMBER_ALIGN_CENTER, True
+    If Err.Number <> 0 Then
+        Err.Clear
+        Set rng = ftr.Range
+        rng.Collapse Direction:=0
+        ftr.Range.Fields.Add Range:=rng, Type:=33 ' wdFieldPage
+    End If
+
+    With ftr.PageNumbers
+        .RestartNumberingAtSection = True
+        .StartingNumber = startAt
+        .NumberStyle = numberStyle
+    End With
+
+    Call ApplyFooterPageNumberStyle(ftr)
+    ftr.Range.Fields.Update
+End Sub
 '==============================================================================
 ' 表格格式化（增强版：边框+线宽+单元格边距）
 '==============================================================================
 
 Public Sub FormatAllTables(Optional ByVal showMessage As Boolean = True)
     Dim tbl As Table, cel As Cell, para As Paragraph
-    Dim rowIdx As Long
 
     On Error Resume Next
 
     For Each tbl In ActiveDocument.Tables
-        tbl.Rows.Alignment = 1 ' wdAlignRowCenter
-
-        ' 设置表格外框线、内部横竖线（黑色单实线，线宽4）
-        With tbl.Borders
-            .OutsideLineStyle = 1  ' wdLineStyleSingle
-            .OutsideLineWidth = 4
-            .OutsideColor = 0      ' wdColorAutomatic (black)
-            .InsideLineStyle = 1
-            .InsideLineWidth = 4
-            .InsideColor = 0
-        End With
-
-        ' 表格前后各空一行
-        Dim tblRng As Range
-        Set tblRng = tbl.Range
-        If tblRng.Paragraphs.Count > 0 Then
-            tblRng.Paragraphs(1).Format.SpaceBefore = 8
-            Dim lastPara As Paragraph
-            Set lastPara = tblRng.Paragraphs(tblRng.Paragraphs.Count)
-            lastPara.Format.SpaceAfter = 8
-        End If
+        Call ApplyStandardTableLayout(tbl)
 
         For Each cel In tbl.Range.Cells
-            ' 设置单元格左右内边距约5.4pt，上下0
-            cel.LeftPadding = 5.4
-            cel.RightPadding = 5.4
-            cel.TopPadding = 0
-            cel.BottomPadding = 0
+            Call ApplyStandardCellLayout(cel)
 
-            rowIdx = cel.RowIndex
             For Each para In cel.Range.Paragraphs
-                If rowIdx = 1 Then
-                    ' 表头：黑体小四
-                    para.Range.Font.NameFarEast = GetFont("黑体", "微软雅黑", "宋体")
-                Else
-                    ' 表格正文：仿宋小四
-                    para.Range.Font.NameFarEast = GetFont("仿宋_GB2312", "仿宋", "华文仿宋")
-                End If
-                para.Range.Font.NameAscii = "Times New Roman"
-                para.Range.Font.Size = FONT_SIZE_XIAOSI
-                para.Format.Alignment = 1 ' wdAlignParagraphCenter
-                para.Format.LineSpacingRule = 0 ' wdLineSpaceSingle
-
-                ' 垂直居中
-                cel.VerticalAlignment = 1 ' wdCellAlignVerticalCenter
+                Call ApplyStandardTableCellParagraph(para)
             Next para
         Next cel
     Next tbl
@@ -1279,17 +1341,103 @@ Public Sub FormatAllTables(Optional ByVal showMessage As Boolean = True)
     End If
 End Sub
 
+Private Sub ApplyStandardTableLayout(tbl As Table)
+    On Error Resume Next
+
+    tbl.Rows.Alignment = 1 ' wdAlignRowCenter
+    tbl.LeftPadding = 5.4
+    tbl.RightPadding = 5.4
+    tbl.TopPadding = 0
+    tbl.BottomPadding = 0
+
+    ' 标准稿：仅保留上下外框线和内部横竖线，左右外框线为无。
+    With tbl.Borders(-1) ' wdBorderTop
+        .LineStyle = 1: .LineWidth = 4: .Color = 0
+    End With
+    With tbl.Borders(-3) ' wdBorderBottom
+        .LineStyle = 1: .LineWidth = 4: .Color = 0
+    End With
+    With tbl.Borders(-5) ' wdBorderHorizontal
+        .LineStyle = 1: .LineWidth = 4: .Color = 0
+    End With
+    With tbl.Borders(-6) ' wdBorderVertical
+        .LineStyle = 1: .LineWidth = 4: .Color = 0
+    End With
+    With tbl.Borders(-2) ' wdBorderLeft
+        .LineStyle = 0
+    End With
+    With tbl.Borders(-4) ' wdBorderRight
+        .LineStyle = 0
+    End With
+End Sub
+
+Private Sub ApplyStandardCellLayout(cel As Cell)
+    On Error Resume Next
+
+    cel.LeftPadding = 5.4
+    cel.RightPadding = 5.4
+    cel.TopPadding = 0
+    cel.BottomPadding = 0
+    cel.VerticalAlignment = 1 ' wdCellAlignVerticalCenter
+End Sub
+
+Private Sub ApplyStandardTableCellParagraph(para As Paragraph)
+    On Error Resume Next
+
+    para.Range.Style = "表格样式"
+
+    With para.Range.Font
+        .NameFarEast = GetFont("仿宋_GB2312", "仿宋", "华文仿宋")
+        .NameAscii = "Times New Roman"
+        .Size = FONT_SIZE_WU
+        .Bold = True
+        .Color = FONT_COLOR_BLACK
+    End With
+    With para.Format
+        .Alignment = 1 ' wdAlignParagraphCenter
+        .LineSpacingRule = LINE_RULE_MULTIPLE
+        .LineSpacing = LINE_SPACING_18
+        .SpaceBefore = 0: .SpaceAfter = 0
+        .FirstLineIndent = 0: .LeftIndent = 0: .RightIndent = 0
+    End With
+End Sub
+
 '==============================================================================
 ' 其他功能
 '==============================================================================
 
-Public Sub UpdatePageNumbers()
+Public Sub FormatSelectedParagraphs()
+    Dim p As Paragraph
+    Dim count As Long
+
+    g_FormatMode = SelectFormatMode()
+    If g_FormatMode = "" Then Exit Sub
+
     On Error Resume Next
-    ActiveDocument.ActiveWindow.View.ShowFieldCodes = False
-    ActiveDocument.Fields.Update
-    MsgBox "页码已更新！", vbInformation, "更新页码"
+    For Each p In Selection.Paragraphs
+        Call FormatSingleParagraph(p)
+        count = count + 1
+    Next p
+    On Error GoTo 0
+
+    MsgBox "选中段落格式化完成！共处理 " & count & " 个段落。", vbInformation, "段落格式化"
 End Sub
 
+Public Sub UpdatePageNumbers()
+    On Error Resume Next
+    Application.ScreenUpdating = False
+    ActiveDocument.ActiveWindow.View.ShowFieldCodes = False
+
+    Call DetectDocumentStructure
+    Call EnsureSectionLayout
+    Call SetupPage
+    Call DetectDocumentStructure
+    Call AddPageNumber
+    ActiveDocument.Fields.Update
+
+    Application.ScreenUpdating = True
+    MsgBox "分节页码已重建！", vbInformation, "更新页码"
+End Sub
 Public Sub AddHeader(headerText As String)
     On Error Resume Next
     Dim hdr As HeaderFooter
@@ -1301,20 +1449,17 @@ Public Sub AddHeader(headerText As String)
         .Font.NameFarEast = GetFont("仿宋_GB2312", "仿宋", "华文仿宋")
         .Font.NameAscii = "Times New Roman"
         .Font.Size = FONT_SIZE_SAN
+        .Font.Color = FONT_COLOR_BLACK
     End With
 End Sub
 
 Public Sub FormatTitle()
-    Dim para As Paragraph, cw As Single
-    cw = CentimetersToPoints(0.85) * 2
+    Dim para As Paragraph
+    g_FormatMode = SelectFormatMode()
     For Each para In Selection.Paragraphs
-        para.Format.LeftIndent = 0
-        para.Format.RightIndent = 0
-        para.Format.FirstLineIndent = cw
-        para.Format.SpaceBefore = 6
-        para.Format.SpaceAfter = 6
+        Call ApplyLevel1Style(para)
     Next para
-    MsgBox "标题格式化完成！", vbInformation, "标题格式化"
+    MsgBox "一级标题格式化完成！", vbInformation, "标题格式化"
 End Sub
 
 '==============================================================================

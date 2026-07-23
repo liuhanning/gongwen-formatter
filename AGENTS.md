@@ -13,16 +13,15 @@ wordhong/
 ├── GongwenFormatter_WPS.bas      # ★ WPS 兼容版（与主版同步维护）
 ├── ResearchProjectFormatter.bas  # 课题研究格式化（独立模块，~560 行）
 ├── demo_gongwen.docx             # 示例/测试文档
-├── 标准格式.docx                 # 格式基准参考
 ├── README.md                     # 完整使用文档 + 格式规范（验收标准）
 ├── CHANGELOG.md                  # 版本日志
-├── 公文格式要求.md               # 格式需求来源
-├── 咨询报告格式规范.md           # 咨询报告补充规范
-├── 政府部门格式标准.txt          # 政府交付版参数
-├── 格式模式说明.md               # 双模式对比
-├── WPS兼容性说明.md              # WPS 差异说明
-├── tests/                        # Python 辅助脚本 pytest 测试
-└── *.py                          # 辅助脚本（比较/修复，非核心）
+├── docs/
+│   ├── 格式规范/                 # 格式需求来源、标准参数、模式对比
+│   └── 历史说明/                 # 版本更新说明、WPS兼容性、项目进度等
+├── reference/                    # 参考资料（PDF标准、基准文档、样稿）
+├── scripts/                      # Python 辅助脚本（比较/修复，非核心）
+│   └── tests/                    # pytest 测试
+└── assets/                       # 截图、图片资源
 ```
 
 ## 核心文件说明
@@ -78,14 +77,14 @@ wordhong/
 
 - 修改 `.bas` 后在 Word 和 WPS 中各运行一次 `FormatGongwen` 验证。
 - 新增/变更格式参数时同步更新 README.md 对应章节。
-- Python 辅助脚本（`compare_*.py`、`fix_*.py`）为一次性工具，不纳入核心维护。
+- Python 辅助脚本（`scripts/compare_*.py`、`scripts/fix_*.py`）为一次性工具，不纳入核心维护。
 
 ## 验证
 
 ### Python 辅助脚本测试
 
 ```bash
-.venv\Scripts\python.exe -m pytest tests/ -v
+.venv\Scripts\python.exe -m pytest scripts/tests/ -v
 ```
 
 ### VBA 宏手动验证检查清单
