@@ -22,6 +22,7 @@ def repair_content(content):
             i += 1
             # Collect msg = ... lines
             rhs_parts = []
+            msgbox_line = None  # reset per block to avoid leaking previous block's MsgBox
             
             # We assume the block is contiguous
             while i < len(lines):
@@ -149,7 +150,7 @@ def repair_content(content):
             # Add MsgBox line (msgbox_line contains the rest of args)
             # We need to make sure we didn't lose `MsgBox msg, ...`
             # In extraction: `elif s.startswith("MsgBox msg"):`
-            if 'msgbox_line' in locals():
+            if msgbox_line is not None:
                 new_block.append(msgbox_line)
             else:
                 # Fallback if we didn't find end?

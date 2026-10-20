@@ -143,6 +143,15 @@ class TestRepairContent:
         assert "(&H4F60)" in result
 
 
+    def test_msgbox_not_leaked_to_next_block(self, repair_vba_mod):
+        """前一个块的 MsgBox 不应被注入到没有 MsgBox 的后续块。"""
+        code = (
+            "Sub A()\n    Dim msg As String\n    msg = \"A\"\n    MsgBox msg, vbOKOnly\nEnd Sub\n"
+            "Sub B()\n    Dim msg As String\n    msg = \"B\"\n    Debug.Print msg\nEnd Sub"
+        )
+        result = repair_vba_mod.repair_content(code)
+        assert result.count("MsgBox msg") == 1
+
 # ===========================================================================
 # refactor_msgbox.py 测试
 # ===========================================================================
